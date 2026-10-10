@@ -27,3 +27,9 @@ Oyunun bu haritayla açılması için: **Edit → Project Settings → Maps & Mo
 - `Arena/BolgeSahasi.py`: arenayı dört bölgeye göre boyar (ateş/lav, su/buz, toprak/orman, hava/mermer). Bölgelere dekor ekler: alevler, kıvılcım, duman, lav kayaları, buz kristalleri, şelaleler, ağaçlar, yosunlu kayalar, sis ve uçan kayalar. Ayrıca çevreye uçan adalar, köprülere gotik meşaleler, arenanın altına bulut denizi kurar. Önce `ElementSahasi.py` çalışmış olmalı.
 
     exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/BolgeSahasi.py", encoding="utf-8").read())
+
+## Bolge dokusu (ArenaBolgeDoku.py)
+Referans resim arena dokusuna yansitildi: Ates komur + lav, Su buz mavisi, Toprak yosun, Hava beyaz mermer.
+`exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())`
+Ayar: `/Game/Maps/Arena/Bolge/MI_ArenaBolge` (Parlaklik, DetayTekrar, DetayGucu). Geri almak: dosyada `GERI_AL = True`.
+Onizleme: `Kaynak/T_ArenaBolge_onizleme.jpg`. Uretim araclari: `araclar/bolge_doku/`.
