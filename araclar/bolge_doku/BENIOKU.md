@@ -7,3 +7,4 @@
 4. `swap.py` onizleme icin glb'nin renk dokusunu degistirir.
 5. `maske.py`: T_ArenaBolgeMaske.png (R=lav isigi, G=parlaklik buz/mermer, B=su isiltisi).
 6. `selale.py` (+`kamera.py`): referanstaki selale noktalarini kameradan arenaya isinlayip duvari takip eden su perdeleri uretir -> SM_Selale.glb.
+7. `selale2.py` + `selale_doku.py`: hacimli surum (govde/serpinti/sis) ve dikissiz akis + dalga normali dokulari.

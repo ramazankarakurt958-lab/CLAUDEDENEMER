@@ -3,7 +3,8 @@
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/Selaleler.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz: eski selaleyi silip yeniden koyar. Kaldirmak icin KALDIR = True.
-# Ayar: /Game/Maps/Arena/Selale/MI_Selale  (Parlaklik, Opaklik, AkisHizi, RenkSu, RenkKopuk)
+# Hacimli: Govde (yuvarlak kesitli su), Serpinti (genisleyen kopuk kabugu), Sis (buyuk selalelerin dibinde).
+# Ayar: /Game/Maps/Arena/Selale/MI_Selale_Govde, _Serpinti, _Sis  (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk...)
 import os
 import unreal
 
@@ -12,11 +13,6 @@ KAYNAK = os.path.join(ICERIK, "Maps", "Arena", "Kaynak", "SM_Selale.glb")
 HEDEF = "/Game/Maps/Arena/Selale"
 ETIKET = "SL_Selale"
 KALDIR = False
-GURULTU_DOKULARI = [
-    "/Game/Vefects/Free_Fire/Shared/Textures/T_VFX_Noise_01",
-    "/Game/NiagaraExamples/Textures/Noise/T_HermiteNoise_CenteredTiling",
-    "/Engine/EngineMaterials/Good64x64TilingNoiseHighFreq",
-]
 
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
@@ -80,31 +76,37 @@ def mesh_aktar():
     return mesh
 
 
-def gurultu():
-    for y in GURULTU_DOKULARI:
-        if eal.does_asset_exist(y):
-            t = eal.load_asset(y)
-            if isinstance(t, unreal.Texture2D):
-                return t
-    return None
+def doku_aktar(dosya, normal=False):
+    yol = os.path.join(os.path.dirname(KAYNAK), dosya)
+    if not os.path.isfile(yol):
+        hata(dosya + " bulunamadi: " + yol)
+    t = unreal.AssetImportTask()
+    t.set_editor_property("filename", yol)
+    t.set_editor_property("destination_path", HEDEF)
+    t.set_editor_property("automated", True)
+    t.set_editor_property("replace_existing", True)
+    t.set_editor_property("save", True)
+    tools.import_asset_tasks([t])
+    d = eal.load_asset(HEDEF + "/" + os.path.splitext(dosya)[0])
+    if not d:
+        hata(dosya + " aktarilamadi.")
+    d.set_editor_property("srgb", False)
+    if normal:
+        d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
+    eal.save_loaded_asset(d)
+    return d
 
 
-def ornekleyici(t):
-    T = unreal.TextureCompressionSettings
-    S = unreal.MaterialSamplerType
-    cs = t.get_editor_property("compression_settings")
-    srgb = t.get_editor_property("srgb")
-    if cs == T.TC_NORMALMAP:
-        return S.SAMPLERTYPE_NORMAL
-    if cs == T.TC_MASKS:
-        return S.SAMPLERTYPE_MASKS
-    if cs in (T.TC_GRAYSCALE, T.TC_ALPHA):
-        return S.SAMPLERTYPE_GRAYSCALE if srgb else S.SAMPLERTYPE_LINEAR_GRAYSCALE
-    return S.SAMPLERTYPE_COLOR if srgb else S.SAMPLERTYPE_LINEAR_COLOR
+# Malzeme ornekleri: ayni ana malzeme, uc katman (onizlemede kullanilan degerler)
+KATMANLAR = {
+    "Govde":    dict(Parlaklik=0.2, Opaklik=1.0, AkisHizi=1.0, KopukEsik=0.58, KopukEk=0.0, KenarYumusak=0.6, OlcekU=0.45, OlcekV=0.06, TabanOpak=0.6),
+    "Serpinti": dict(Parlaklik=0.45, Opaklik=0.3, AkisHizi=1.6, KopukEsik=0.35, KopukEk=0.5, KenarYumusak=1.5, OlcekU=0.7, OlcekV=0.09, TabanOpak=0.0),
+    "Sis":      dict(Parlaklik=0.55, Opaklik=0.2, AkisHizi=0.08, KopukEsik=0.0, KopukEk=1.0, KenarYumusak=3.0, OlcekU=0.5, OlcekV=0.5, TabanOpak=0.35),
+}
 
 
-def malzeme(gur):
-    """Yari saydam, kendinden aydinlik su perdesi. UV0: (enine 0..1, boyuna 0..1), UV1: metre."""
+def malzeme(akis, nrm):
+    """Isik alan yari saydam su. UV0: (cevre 0..1, boyuna 0..1), UV1: metre. Katmanlar MI parametreleriyle ayrilir."""
     yol = HEDEF + "/M_Selale"
     if eal.does_asset_exist(yol):
         mat = eal.load_asset(yol)
@@ -112,8 +114,12 @@ def malzeme(gur):
     else:
         mat = tools.create_asset("M_Selale", HEDEF, unreal.Material, unreal.MaterialFactoryNew())
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
-    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     mat.set_editor_property("two_sided", True)
+    try:  # yuzeyde gercek isik + yansima (hacim hissi)
+        mat.set_editor_property("translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
+    except Exception as e:
+        log("   isiklandirma modu ayarlanamadi (onemsiz): %s" % e)
 
     def ifade(sinif, x, y):
         return mel.create_material_expression(mat, sinif, x, y)
@@ -146,71 +152,108 @@ def malzeme(gur):
         bag(a, ca, e, "")
         return e
 
+    def doku(tex, uvs, x, y, tur):
+        e = ifade(unreal.MaterialExpressionTextureSample, x, y)
+        e.set_editor_property("texture", tex)
+        e.set_editor_property("sampler_type", tur)
+        bag(uvs, "", e, "UVs")
+        return e
+
+    def iki_v(a, b, x, y):
+        e = ifade(unreal.MaterialExpressionAppendVector, x, y)
+        bag(a, "", e, "A")
+        bag(b, "", e, "B")
+        return e
+
     M, A, S = unreal.MaterialExpressionMultiply, unreal.MaterialExpressionAdd, unreal.MaterialExpressionSubtract
+    ST = unreal.MaterialSamplerType
+    sat = unreal.MaterialExpressionSaturate
 
-    uv0 = ifade(unreal.MaterialExpressionTextureCoordinate, -1800, 400)
-    uv1 = ifade(unreal.MaterialExpressionTextureCoordinate, -1800, -200)
+    uv0 = ifade(unreal.MaterialExpressionTextureCoordinate, -2200, 600)
+    uv1 = ifade(unreal.MaterialExpressionTextureCoordinate, -2200, -300)
     uv1.set_editor_property("coordinate_index", 1)
-    hiz = skaler("AkisHizi", 1.0, -1800, -50)
+    olcek = iki_v(skaler("OlcekU", 0.45, -2200, -200), skaler("OlcekV", 0.06, -2200, -120), -2050, -160)
+    u = iki(M, uv1, olcek, -1900, -300)
+    t = iki(M, ifade(unreal.MaterialExpressionTime, -2050, -20), skaler("AkisHizi", 1.0, -2050, 60), -1900, 0)
+    # A: u - (0, t*0.35)   B: u*(1.7,1.9) + (0.37, -t*0.6)
+    kayA = iki_v(sabit(0.0, -1750, 40), iki(M, t, sabit(-0.35, -1750, 120), -1650, 80), -1550, 40)
+    uvA = iki(A, u, kayA, -1400, -300)
+    c2 = ifade(unreal.MaterialExpressionConstant2Vector, -1750, -150)
+    c2.set_editor_property("r", 1.7)
+    c2.set_editor_property("g", 1.9)
+    kayB = iki_v(sabit(0.37, -1750, 200), iki(M, t, sabit(-0.6, -1750, 280), -1650, 240), -1550, 200)
+    uvB = iki(A, iki(M, u, c2, -1550, -150), kayB, -1400, -100)
+    tA = doku(akis, uvA, -1200, -400, ST.SAMPLERTYPE_LINEAR_COLOR)
+    tB = doku(akis, uvB, -1200, -100, ST.SAMPLERTYPE_LINEAR_COLOR)
+    s = iki(A, iki(M, tA, sabit(0.6, -1000, -350), -900, -400, "R"), iki(M, tB, sabit(0.4, -1000, -50), -900, -100, "R"), -750, -250)
 
-    # Akan desen: iki farkli olcek ve hizda asagi kayan gurultu (0..1)
-    def akis(olcek_u, olcek_v, h, y):
-        olc = ifade(unreal.MaterialExpressionConstant2Vector, -1600, y + 60)
-        olc.set_editor_property("r", olcek_u)
-        olc.set_editor_property("g", olcek_v)
-        uv = iki(M, uv1, olc, -1450, y)
-        zaman = ifade(unreal.MaterialExpressionTime, -1600, y + 140)
-        kay = iki(M, iki(M, zaman, hiz, -1450, y + 140), sabit(-h, -1450, y + 220), -1300, y + 140)
-        ek = ifade(unreal.MaterialExpressionAppendVector, -1150, y + 140)
-        bag(sabit(0.0, -1300, y + 240), "", ek, "A")
-        bag(kay, "", ek, "B")
-        son = iki(A, uv, ek, -1000, y)
-        if gur:
-            t = ifade(unreal.MaterialExpressionTextureSample, -850, y)
-            t.set_editor_property("texture", gur)
-            t.set_editor_property("sampler_type", ornekleyici(gur))
-            bag(son, "", t, "UVs")
-            return t, "R"
-        return sabit(0.6, -850, y), ""
+    # Renk: derin mavi su -> kopuk beyazi
+    kop = iki(A, iki(M, iki(S, s, skaler("KopukEsik", 0.58, -750, -150), -600, -250), sabit(2.5, -600, -150), -450, -250),
+              skaler("KopukEk", 0.0, -450, -150), -300, -250)
+    kop = tek(sat, kop, -150, -250)
+    renk = ifade(unreal.MaterialExpressionLinearInterpolate, 0, -450)
+    bag(vektor("RenkSu", 0.05, 0.25, 0.62, -200, -600), "", renk, "A")
+    bag(vektor("RenkKopuk", 0.9, 0.97, 1.0, -200, -450), "", renk, "B")
+    bag(kop, "", renk, "Alpha")
+    mel.connect_material_property(renk, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(iki(M, renk, skaler("Parlaklik", 0.2, 0, -300), 200, -350), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.connect_material_property(sabit(0.12, 200, -200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(sabit(0.6, 200, -130), "", unreal.MaterialProperty.MP_SPECULAR)
+    # Akan dalga normali (gucu %60)
+    tN = doku(nrm, uvA, -1200, 250, ST.SAMPLERTYPE_NORMAL)
+    duz = ifade(unreal.MaterialExpressionConstant3Vector, -1000, 400)
+    duz.set_editor_property("constant", unreal.LinearColor(0, 0, 1, 0))
+    nl = ifade(unreal.MaterialExpressionLinearInterpolate, -800, 300)
+    bag(duz, "", nl, "A")
+    bag(tN, "RGB", nl, "B")
+    bag(sabit(0.6, -1000, 480), "", nl, "Alpha")
+    mel.connect_material_property(nl, "", unreal.MaterialProperty.MP_NORMAL)
 
-    a1, c1 = akis(1.2, 0.12, 0.35, -400)
-    a2, c2 = akis(2.7, 0.25, 0.6, -100)
-    s = iki(A, iki(M, a1, sabit(0.6, -650, -350), -550, -400, c1), iki(M, a2, sabit(0.4, -650, -50), -550, -100, c2), -400, -250)
-
-    # Renk: su mavisi -> kopuk beyazi (desen parlak yerlerde kopuk)
-    kopuk = tek(unreal.MaterialExpressionSaturate, iki(M, iki(S, s, sabit(0.5, -400, -150), -300, -250), sabit(2.5, -300, -150), -200, -250), -100, -250)
-    renk = ifade(unreal.MaterialExpressionLinearInterpolate, 0, -400)
-    bag(vektor("RenkSu", 0.18, 0.5, 1.0, -200, -500), "", renk, "A")
-    bag(vektor("RenkKopuk", 0.9, 0.97, 1.0, -200, -350), "", renk, "B")
-    bag(kopuk, "", renk, "Alpha")
-    mel.connect_material_property(iki(M, renk, skaler("Parlaklik", 1.6, 0, -200), 200, -400), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-
-    # Opaklik: desen * kenarlarda incelme * altta sise karisma * tepede yumusak baslangic
-    ux = ifade(unreal.MaterialExpressionComponentMask, -1600, 400)
-    ux.set_editor_property("r", True)
-    bag(uv0, "", ux, "")
-    vy = ifade(unreal.MaterialExpressionComponentMask, -1600, 550)
+    # Opaklik: (taban + desen) * kenarda incelme (bakis acisi) * altta kaybolma * tepede yumusak baslangic
+    sk = tek(sat, iki(M, iki(S, s, sabit(0.3, -750, 0), -600, 0), sabit(2.0, -600, 80), -450, 0), -300, 0)
+    yog = ifade(unreal.MaterialExpressionLinearInterpolate, -150, 50)
+    bag(sk, "", yog, "A")
+    bag(tA, "G", yog, "B")
+    bag(sabit(0.25, -300, 120), "", yog, "Alpha")
+    taban = skaler("TabanOpak", 0.6, -150, 200)
+    desen = iki(A, taban, iki(M, tek(unreal.MaterialExpressionOneMinus, taban, 0, 250), yog, 100, 150), 250, 150)
+    bak = tek(unreal.MaterialExpressionAbs, iki(unreal.MaterialExpressionDotProduct, ifade(unreal.MaterialExpressionVertexNormalWS, -600, 600),
+                                                ifade(unreal.MaterialExpressionCameraVectorWS, -600, 700), -450, 650), -300, 650)
+    kenar = ifade(unreal.MaterialExpressionPower, -150, 650)
+    bag(bak, "", kenar, "Base")
+    bag(skaler("KenarYumusak", 0.6, -300, 750), "", kenar, "Exp")
+    vy = ifade(unreal.MaterialExpressionComponentMask, -2000, 600)
     vy.set_editor_property("g", True)
     bag(uv0, "", vy, "")
-    kenar = iki(unreal.MaterialExpressionMin, ux, tek(unreal.MaterialExpressionOneMinus, ux, -1450, 450), -1300, 400)
-    kenar = tek(unreal.MaterialExpressionSaturate, iki(M, kenar, sabit(5.5, -1200, 480), -1100, 400), -1000, 400)
-    alt = tek(unreal.MaterialExpressionSaturate, iki(M, tek(unreal.MaterialExpressionOneMinus, vy, -1450, 600), sabit(2.2, -1300, 680), -1200, 600), -1100, 600)
-    ust = tek(unreal.MaterialExpressionSaturate, iki(M, vy, sabit(30.0, -1300, 780), -1200, 750), -1100, 750)
-    desen = iki(A, iki(M, s, sabit(0.55, -400, 100), -300, 50), sabit(0.45, -300, 150), -200, 50)
-    op = iki(M, iki(M, iki(M, desen, kenar, -100, 200), alt, 0, 300), ust, 100, 400)
-    op = iki(M, op, skaler("Opaklik", 0.85, 100, 550), 250, 400)
+    alt = tek(sat, iki(M, tek(unreal.MaterialExpressionOneMinus, vy, -1850, 650), sabit(2.2, -1850, 730), -1700, 650), -1550, 650)
+    ust = tek(sat, iki(M, vy, sabit(30.0, -1850, 830), -1700, 800), -1550, 800)
+    op = iki(M, iki(M, iki(M, desen, kenar, 400, 300), alt, 550, 400), ust, 700, 500)
+    op = iki(M, op, skaler("Opaklik", 1.0, 700, 650), 850, 500)
+    # Duvara/kayaya degdigi yerde sert cizgi olmasin
+    df = ifade(unreal.MaterialExpressionDepthFade, 1000, 500)
+    if bag(op, "", df, "Opacity") or bag(op, "", df, "InOpacity"):
+        try:
+            df.set_editor_property("fade_distance_default", 120.0)
+        except Exception:
+            pass
+        op = df
     mel.connect_material_property(op, "", unreal.MaterialProperty.MP_OPACITY)
 
     mel.layout_material_expressions(mat)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat)
 
-    mi_yol = HEDEF + "/MI_Selale"
-    mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
-        tools.create_asset("MI_Selale", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-    mel.set_material_instance_parent(mi, mat)
-    eal.save_loaded_asset(mi)
-    return mi
+    mis = {}
+    for ad, degerler in KATMANLAR.items():
+        mi_yol = HEDEF + "/MI_Selale_" + ad
+        mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
+            tools.create_asset("MI_Selale_" + ad, HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        mel.set_material_instance_parent(mi, mat)
+        for k, v in degerler.items():
+            mel.set_material_instance_scalar_parameter_value(mi, k, v)
+        eal.save_loaded_asset(mi)
+        mis[ad] = mi
+    return mis
 
 
 def calistir():
@@ -222,12 +265,14 @@ def calistir():
         return
     log("1/3 Selale mesh'i aktariliyor...")
     mesh = mesh_aktar()
-    log("2/3 Malzeme: M_Selale")
-    gur = gurultu()
-    log("   akis deseni: %s" % (gur.get_name() if gur else "yok (duz su)"))
-    mi = malzeme(gur)
-    for i in range(len(mesh.get_editor_property("static_materials"))):
-        mesh.set_material(i, mi)
+    log("2/3 Malzeme: M_Selale (govde, serpinti, sis)")
+    mis = malzeme(doku_aktar("T_Selale_Akis.png"), doku_aktar("T_Selale_N.png", normal=True))
+    sira = list(KATMANLAR)
+    for i, sm in enumerate(mesh.get_editor_property("static_materials")):
+        ad = str(sm.get_editor_property("material_slot_name"))
+        kat = next((k for k in sira if k.lower() in ad.lower()), sira[min(i, len(sira) - 1)])
+        mesh.set_material(i, mis[kat])
+        log("   yuva %d (%s) -> %s" % (i, ad, kat))
     eal.save_loaded_asset(mesh)
 
     log("3/3 Sahneye konuyor (arenayla ayni konum)...")
@@ -239,7 +284,7 @@ def calistir():
     c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     c.set_editor_property("cast_shadow", False)
     les.save_current_level()
-    log("TAMAM - 8 selale eklendi. Ayar: " + HEDEF + "/MI_Selale (Parlaklik, Opaklik, AkisHizi, RenkSu, RenkKopuk)")
+    log("TAMAM - 8 hacimli selale eklendi. Ayar: " + HEDEF + "/MI_Selale_Govde, _Serpinti, _Sis")
 
 
 calistir()

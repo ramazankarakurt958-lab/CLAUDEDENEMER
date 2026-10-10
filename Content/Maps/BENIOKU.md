@@ -35,6 +35,6 @@ Ayar: `/Game/Maps/Arena/Bolge/MI_ArenaBolge` (Parlaklik, LavGucu, LavHiz, SuIsil
 Onizleme: `Kaynak/T_ArenaBolge_onizleme.jpg`. Uretim araclari: `araclar/bolge_doku/`.
 
 ## Selaleler (Selaleler.py)
-Su tribunune referans resimdeki yerlerinde 8 adet 3D selale (yari saydam, akan, altta sise karisan).
+Su tribunune referans resimdeki yerlerinde 8 adet hacimli 3D selale: yuvarlak kesitli isik alan su govdesi, asagi indikce genisleyen serpinti kabugu, buyuk selalelerin dibinde sis.
 Mesh `Kaynak/SM_Selale.glb` arena ile ayni eksenlerde uretildi ve arenanin konumuna konur. Uretim: `araclar/bolge_doku/selale.py`.
-Ayar: `/Game/Maps/Arena/Selale/MI_Selale` (Parlaklik, Opaklik, AkisHizi, RenkSu, RenkKopuk). Kaldirmak: dosyada `KALDIR = True`.
+Ayar: `/Game/Maps/Arena/Selale/MI_Selale_Govde`, `_Serpinti`, `_Sis` (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk). Kaldirmak: dosyada `KALDIR = True`.
