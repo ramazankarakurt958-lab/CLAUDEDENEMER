@@ -1,19 +1,35 @@
 # Unreal Engine 5 - Arena haritasini otomatik olusturur.
-# Calistirma: Editor'de  Tools -> Execute Python Script...  ve bu dosyayi sec.
-# (Gerekirse once Edit -> Plugins -> "Python Editor Script Plugin" etkinlestirilip editor yeniden baslatilir.)
+# Calistirma: Output Log -> Cmd yerine Python sec ->
+#   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaIceAktar.py", encoding="utf-8").read())
+# Her adim Output Log'a "[Arena]" ile baslayan satir yazar.
 import os
 import unreal
 
-KAYNAK = os.path.join(unreal.Paths.project_content_dir(), "Maps", "Arena", "Kaynak", "arena_game.glb")
+KAYNAK = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_content_dir()),
+                      "Maps", "Arena", "Kaynak", "arena_game.glb")
 VARLIK_KLASORU = "/Game/Maps/Arena/Varliklar"
 HARITA = "/Game/Maps/Arena_Map"
 PLATFORM_UST_CM = 2300.0  # orta platformun ust yuzeyi (~23 m)
 
-eal = unreal.EditorAssetLibrary
-if not os.path.isfile(KAYNAK):
-    raise RuntimeError("GLB bulunamadi: " + KAYNAK)
 
-# 1) GLB'yi ice aktar (mesh + malzeme + dokular)
+def log(msg):
+    unreal.log_warning("[Arena] " + msg)
+
+
+def hata(msg):
+    unreal.log_error("[Arena] HATA: " + msg)
+    raise RuntimeError(msg)
+
+
+eal = unreal.EditorAssetLibrary
+
+# 1) Dosya kontrolu
+log("1/4 Dosya kontrol ediliyor: " + KAYNAK)
+if not os.path.isfile(KAYNAK):
+    hata("arena_game.glb bulunamadi. Su konumda olmali: " + KAYNAK)
+
+# 2) GLB'yi ice aktar (mesh + malzeme + dokular)
+log("2/4 GLB ice aktariliyor (birkac dakika surebilir)...")
 task = unreal.AssetImportTask()
 task.set_editor_property("filename", KAYNAK)
 task.set_editor_property("destination_path", VARLIK_KLASORU)
@@ -28,51 +44,79 @@ for yol in eal.list_assets(VARLIK_KLASORU, recursive=True, include_folder=False)
     if isinstance(a, unreal.StaticMesh):
         meshes.append(a)
 if not meshes:
-    raise RuntimeError("Ice aktarma sonrasi StaticMesh bulunamadi: " + VARLIK_KLASORU)
+    hata("Ice aktarma mesh uretmedi. Edit -> Plugins icinde 'glTF Importer' veya "
+         "'Interchange Framework' eklentisini etkinlestirip editoru yeniden baslat.")
+log("   %d mesh aktarildi." % len(meshes))
 
-# 2) Carpisma: oyuncu gercek geometri uzerinde yuruyebilsin; Nanite ile performans
+# Carpisma (oyuncu gercek geometri uzerinde yurusun) + Nanite
 for m in meshes:
-    body = m.get_editor_property("body_setup")
-    if body:
-        body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    try:
+        body = m.get_editor_property("body_setup")
+        if body:
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    except Exception as e:
+        log("   Carpisma ayarlanamadi (onemsiz): %s" % e)
     try:
         ns = m.get_editor_property("nanite_settings")
         ns.set_editor_property("enabled", True)
         m.set_editor_property("nanite_settings", ns)
     except Exception as e:
-        unreal.log_warning("Nanite ayarlanamadi: %s" % e)
+        log("   Nanite acilamadi (onemsiz): %s" % e)
     eal.save_loaded_asset(m)
 
-# 3) Yeni harita olustur ve sahneyi kur
+# 3) Harita
+log("3/4 Harita olusturuluyor: " + HARITA)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 if eal.does_asset_exist(HARITA):
-    les.load_level(HARITA)
+    if not les.load_level(HARITA):
+        hata("Mevcut harita acilamadi: " + HARITA)
     for act in eas.get_all_level_actors():
         eas.destroy_actor(act)
-else:
-    les.new_level(HARITA)
+elif not les.new_level(HARITA):
+    hata("Yeni harita olusturulamadi: " + HARITA)
 
-def koy(sinif, konum, donus=unreal.Rotator(0, 0, 0), etiket=None):
-    a = eas.spawn_actor_from_class(sinif, konum, donus)
-    if etiket:
-        a.set_actor_label(etiket)
-    return a
+
+def koy(sinif, konum, donus=None, etiket=None):
+    try:
+        a = eas.spawn_actor_from_class(sinif, konum, donus or unreal.Rotator(0, 0, 0))
+        if a and etiket:
+            a.set_actor_label(etiket)
+        return a
+    except Exception as e:
+        log("   %s eklenemedi (onemsiz): %s" % (etiket, e))
+        return None
+
 
 for m in meshes:
     a = eas.spawn_actor_from_object(m, unreal.Vector(0, 0, 0))
+    if not a:
+        hata("Arena sahneye eklenemedi.")
     a.set_actor_label("Arena")
-    a.set_mobility(unreal.ComponentMobility.STATIC)
+    try:
+        a.static_mesh_component.set_mobility(unreal.ComponentMobility.STATIC)
+    except Exception:
+        pass
 
 gunes = koy(unreal.DirectionalLight, unreal.Vector(0, 0, 8000), unreal.Rotator(-15, -40, 0), "Gunes")
-gunes.light_component.set_editor_property("intensity", 8.0)
-gunes.light_component.set_editor_property("atmosphere_sun_light", True)
+if gunes:
+    try:
+        gunes.light_component.set_editor_property("intensity", 8.0)
+        gunes.light_component.set_editor_property("atmosphere_sun_light", True)
+    except Exception as e:
+        log("   Gunes ayari yapilamadi (onemsiz): %s" % e)
 koy(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), etiket="Atmosfer")
 gok = koy(unreal.SkyLight, unreal.Vector(0, 0, 6000), etiket="GokIsigi")
-gok.light_component.set_editor_property("real_time_capture", True)
+if gok:
+    try:
+        gok.light_component.set_editor_property("real_time_capture", True)
+    except Exception as e:
+        log("   Gok isigi ayari yapilamadi (onemsiz): %s" % e)
 koy(unreal.ExponentialHeightFog, unreal.Vector(0, 0, -2000), etiket="Sis")
 koy(unreal.VolumetricCloud, unreal.Vector(0, 0, 0), etiket="Bulutlar")
 koy(unreal.PlayerStart, unreal.Vector(0, 0, PLATFORM_UST_CM + 120), etiket="OyuncuBaslangic")
 
+# 4) Kaydet
+log("4/4 Kaydediliyor...")
 les.save_current_level()
-unreal.log("Arena_Map hazir: " + HARITA)
+log("TAMAM - Arena_Map hazir: " + HARITA)
