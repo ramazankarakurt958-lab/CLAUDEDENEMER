@@ -31,5 +31,5 @@ Oyunun bu haritayla açılması için: **Edit → Project Settings → Maps & Mo
 ## Bolge dokusu (ArenaBolgeDoku.py)
 Referans resim arena dokusuna yansitildi: Ates komur + lav, Su buz mavisi, Toprak yosun, Hava beyaz mermer.
 `exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())`
-Ayar: `/Game/Maps/Arena/Bolge/MI_ArenaBolge` (Parlaklik, DetayTekrar, DetayGucu). Geri almak: dosyada `GERI_AL = True`.
+Ayar: `/Game/Maps/Arena/Bolge/MI_ArenaBolge` (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu). Geri almak: dosyada `GERI_AL = True`.
 Onizleme: `Kaynak/T_ArenaBolge_onizleme.jpg`. Uretim araclari: `araclar/bolge_doku/`.

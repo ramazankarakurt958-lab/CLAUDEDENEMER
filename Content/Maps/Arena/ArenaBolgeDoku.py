@@ -2,6 +2,7 @@
 # Ates: komurlesmis tas + lav catlaklari, Su: buz mavisi, Toprak: yosunlu tas, Hava: beyaz mermer.
 # Doku: Kaynak/T_ArenaBolge.jpg (araclar ile referans resimden uretildi). Arenanin normal/ORM dokulari ve
 # ArenaDetay'in yakin plan tas detayi aynen kalir; sadece renk dokusu degisir.
+# Maske: Kaynak/T_ArenaBolgeMaske.png  R=lav (isik verir, nabiz gibi atar), G=parlaklik (buz/mermer), B=su isiltisi.
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())
 # Geri almak icin arenaya tekrar MI_ArenaTas verilir (dosyanin sonundaki GERI_AL'a bak).
@@ -61,10 +62,10 @@ def arena_dokulari():
     return normal, orm
 
 
-def bolge_dokusu():
-    yol = os.path.join(KAYNAK, "T_ArenaBolge.jpg")
+def aktar(dosya):
+    yol = os.path.join(KAYNAK, dosya)
     if not os.path.isfile(yol):
-        hata("T_ArenaBolge.jpg bulunamadi: " + yol)
+        return None
     t = unreal.AssetImportTask()
     t.set_editor_property("filename", yol)
     t.set_editor_property("destination_path", HEDEF)
@@ -72,9 +73,13 @@ def bolge_dokusu():
     t.set_editor_property("replace_existing", True)
     t.set_editor_property("save", True)
     tools.import_asset_tasks([t])
-    d = eal.load_asset(HEDEF + "/T_ArenaBolge")
+    return eal.load_asset(HEDEF + "/" + os.path.splitext(dosya)[0])
+
+
+def bolge_dokusu():
+    d = aktar("T_ArenaBolge.jpg")
     if not d:
-        hata("T_ArenaBolge aktarilamadi.")
+        hata("T_ArenaBolge.jpg bulunamadi/aktarilamadi: " + KAYNAK)
     d.set_editor_property("srgb", True)
     d.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
     d.set_editor_property("max_texture_size", 0)
@@ -82,7 +87,19 @@ def bolge_dokusu():
     return d
 
 
-def malzeme(renk, normal, orm, detay_d, detay_n):
+def maske_dokusu():
+    d = aktar("T_ArenaBolgeMaske.png")
+    if not d:
+        log("   T_ArenaBolgeMaske.png yok - lav isigi/parlaklik eklenmeyecek")
+        return None
+    d.set_editor_property("srgb", False)
+    d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+    d.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+    eal.save_loaded_asset(d)
+    return d
+
+
+def malzeme(renk, normal, orm, detay_d, detay_n, maske):
     """M_ArenaTas ile ayni yapi, renk dokusu degistirilebilir parametre (Renk)."""
     yol = HEDEF + "/M_ArenaBolge"
     if eal.does_asset_exist(yol):
@@ -138,12 +155,56 @@ def malzeme(renk, normal, orm, detay_d, detay_n):
     mel.connect_material_property(renk_d, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     if orm:
-        t_orm = doku(orm, ST.SAMPLERTYPE_LINEAR_COLOR, -900, -100)
-        mel.connect_material_property(t_orm, "G", unreal.MaterialProperty.MP_ROUGHNESS)
+        puruz, puruz_c = doku(orm, ST.SAMPLERTYPE_LINEAR_COLOR, -900, -100), "G"
     else:
-        rc = ifade(unreal.MaterialExpressionConstant, -300, -100)
-        rc.set_editor_property("r", 0.85)
-        mel.connect_material_property(rc, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        puruz, puruz_c = ifade(unreal.MaterialExpressionConstant, -300, -100), ""
+        puruz.set_editor_property("r", 0.85)
+
+    if maske:
+        t_m = doku(maske, ST.SAMPLERTYPE_MASKS, -1400, -900)
+
+        def sabit(v, x, y):
+            e = ifade(unreal.MaterialExpressionConstant, x, y)
+            e.set_editor_property("r", v)
+            return e
+
+        def topla(a, b, x, y, ca="", cb=""):
+            e = ifade(unreal.MaterialExpressionAdd, x, y)
+            bag(a, ca, e, "A")
+            bag(b, cb, e, "B")
+            return e
+
+        def dalga(hiz, egim, x, y):
+            """0..1 arasi zamanla kayan dalga: sin(zaman*hiz + dunya_konumu . egim)"""
+            zaman = ifade(unreal.MaterialExpressionTime, x - 400, y)
+            dk = ifade(unreal.MaterialExpressionWorldPosition, x - 400, y + 100)
+            yon = ifade(unreal.MaterialExpressionConstant3Vector, x - 400, y + 200)
+            yon.set_editor_property("constant", unreal.LinearColor(egim[0], egim[1], egim[2], 0))
+            faz = ifade(unreal.MaterialExpressionDotProduct, x - 250, y + 150)
+            bag(dk, "", faz, "A")
+            bag(yon, "", faz, "B")
+            sn = ifade(unreal.MaterialExpressionSine, x, y)
+            bag(topla(carp(zaman, hiz, x - 250, y), faz, x - 120, y), "", sn, "")
+            return carp(topla(sn, sabit(1.0, x, y + 80), x + 120, y), sabit(0.5, x + 120, y + 80), x + 240, y)
+
+        # Lav: renk * turuncu * maske.R * LavGucu * (0.6 + 0.4 * dalga)
+        turuncu = ifade(unreal.MaterialExpressionConstant3Vector, -900, -1000)
+        turuncu.set_editor_property("constant", unreal.LinearColor(1.6, 1.0, 0.6, 0))
+        lav = carp(carp(t_renk, turuncu, -650, -1000, "RGB"), t_m, -500, -1000, "", "R")
+        nabiz = topla(sabit(0.6, -700, -1300), carp(dalga(skaler("LavHiz", 0.25, -1300, -1350), (0.0005, 0.0005, 0.0003), -900, -1400),
+                                                    sabit(0.4, -700, -1250), -600, -1300), -450, -1300)
+        lav = carp(carp(lav, nabiz, -350, -1100), skaler("LavGucu", 6.0, -500, -900), -200, -1000)
+        # Su: renk * maske.B * SuIsiltisi * dalga (asagi akan bantlar)
+        su = carp(carp(t_renk, t_m, -650, -700, "RGB", "B"), skaler("SuIsiltisi", 1.5, -650, -600), -500, -700)
+        su = carp(su, dalga(skaler("SuHiz", 0.8, -1300, -750), (0.0, 0.0, 0.004), -900, -800), -350, -700)
+        mel.connect_material_property(topla(lav, su, -100, -900), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        # Parlaklik: puruzluluk -> ParlakPuruz (buz/mermer cilali)
+        pl = ifade(unreal.MaterialExpressionLinearInterpolate, -300, -150)
+        bag(puruz, puruz_c, pl, "A")
+        bag(skaler("ParlakPuruz", 0.22, -500, -150), "", pl, "B")
+        bag(t_m, "G", pl, "Alpha")
+        puruz, puruz_c = pl, ""
+    mel.connect_material_property(puruz, puruz_c, unreal.MaterialProperty.MP_ROUGHNESS)
 
     if normal or detay_n:
         parcalar = []
@@ -187,8 +248,9 @@ def calistir():
     log("   normal=%s orm=%s detay=%s" % (normal.get_name() if normal else "-", orm.get_name() if orm else "-",
                                          "var" if detay_d else "yok"))
 
+    maske = maske_dokusu()
     log("2/3 Malzeme: M_ArenaBolge")
-    mat = malzeme(renk, normal, orm, detay_d, detay_n)
+    mat = malzeme(renk, normal, orm, detay_d, detay_n, maske)
     mi_yol = HEDEF + "/MI_ArenaBolge"
     mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
         tools.create_asset("MI_ArenaBolge", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -202,7 +264,7 @@ def calistir():
     log("3/3 Arenaya ataniyor...")
     malzeme_ata(aktor, sm, mi)
     les.save_current_level()
-    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, DetayTekrar, DetayGucu)")
+    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu)")
 
 
 calistir()
