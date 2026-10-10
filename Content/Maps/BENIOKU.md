@@ -33,3 +33,8 @@ Referans resim arena dokusuna yansitildi: Ates komur + lav, Su buz mavisi, Topra
 `exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())`
 Ayar: `/Game/Maps/Arena/Bolge/MI_ArenaBolge` (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu). Geri almak: dosyada `GERI_AL = True`.
 Onizleme: `Kaynak/T_ArenaBolge_onizleme.jpg`. Uretim araclari: `araclar/bolge_doku/`.
+
+## Selaleler (Selaleler.py)
+Su tribunune referans resimdeki yerlerinde 8 adet 3D selale (yari saydam, akan, altta sise karisan).
+Mesh `Kaynak/SM_Selale.glb` arena ile ayni eksenlerde uretildi ve arenanin konumuna konur. Uretim: `araclar/bolge_doku/selale.py`.
+Ayar: `/Game/Maps/Arena/Selale/MI_Selale` (Parlaklik, Opaklik, AkisHizi, RenkSu, RenkKopuk). Kaldirmak: dosyada `KALDIR = True`.
