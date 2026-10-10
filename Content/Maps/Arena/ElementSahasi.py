@@ -3,6 +3,7 @@
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ElementSahasi.py", encoding="utf-8").read())
 # Tekrar calistirilabilir: once eski "ES_" nesnelerini siler, sonra yeniden kurar.
 import math
+import os
 import unreal
 
 # ---------------- AYARLAR ----------------
@@ -11,8 +12,8 @@ SAHA_BOY = 2400.0        # cm, X yonu (uzun kenar)
 SAHA_EN = 1600.0         # cm, Y yonu (kisa kenar)
 SAHA_DONUS = 0.0         # derece, sahayi platform uzerinde dondurmek icin
 MERKEZ = None            # None = arenanin orta platformu; elle: (x, y, z)  z = zemin yuksekligi
-SUTUN_BOY = 700.0        # cm
-SUTUN_CAP = 60.0         # cm (yaricap)
+SUTUN_BOY = 700.0        # cm (gotik sutunun kure yuvasina kadar boyu)
+SUTUN_CAP = 60.0         # cm - 60 = orijinal gotik sutun kalinligi
 KURE_CAP = 60.0          # cm (yaricap)
 ISIN_CAP = 6.0           # cm (cekirdek isin yaricapi)
 DUVAR_BOY = 4000.0       # cm - topun isinlarin ustunden asmamasi icin yuksek
@@ -173,13 +174,13 @@ def isin_malzemesi():
 
 def sutun_malzemesi():
     m = yeni_malzeme("M_ElementSutun")
-    renk = vektor(m, "TasRengi", unreal.LinearColor(0.30, 0.29, 0.27, 1), -900, -200)
+    renk = vektor(m, "TasRengi", unreal.LinearColor(0.42, 0.40, 0.37, 1), -900, -200)
     dd = eal.load_asset("/Game/Maps/Arena/Detay/T_ArenaDetay_D") if eal.does_asset_exist("/Game/Maps/Arena/Detay/T_ArenaDetay_D") else None
     dn = eal.load_asset("/Game/Maps/Arena/Detay/T_ArenaDetay_N") if eal.does_asset_exist("/Game/Maps/Arena/Detay/T_ArenaDetay_N") else None
     if dd:
         uv = ifade(m, unreal.MaterialExpressionTextureCoordinate, -1300, 100)
-        uv.set_editor_property("u_tiling", 3.0)
-        uv.set_editor_property("v_tiling", 3.0)
+        uv.set_editor_property("u_tiling", 2.0)
+        uv.set_editor_property("v_tiling", 2.0)
         td = ifade(m, unreal.MaterialExpressionTextureSample, -1000, 50)
         td.set_editor_property("texture", dd)
         td.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
@@ -215,6 +216,39 @@ def ornek(ad, ana, skalerler=None, vektorler=None):
         mel.set_material_instance_vector_parameter_value(mi, k, v)
     eal.save_loaded_asset(mi)
     return mi
+
+
+# ---------- gotik sutun modeli ----------
+def gotik_sutun():
+    """Kaynak/SM_GotikSutun.glb'yi bir kez ice aktarir; yoksa None (duz silindir kullanilir)."""
+    hedef = KLASOR + "/Gotik"
+    bul = lambda: [a for a in (eal.load_asset(y) for y in eal.list_assets(hedef, recursive=True, include_folder=False))
+                   if isinstance(a, unreal.StaticMesh)] if eal.does_directory_exist(hedef) else []
+    mesh = bul()
+    if not mesh:
+        dosya = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_content_dir()),
+                             "Maps", "Arena", "Kaynak", "SM_GotikSutun.glb")
+        if not os.path.isfile(dosya):
+            log("   UYARI: SM_GotikSutun.glb yok, duz silindir kullaniliyor: " + dosya)
+            return None
+        t = unreal.AssetImportTask()
+        t.set_editor_property("filename", dosya)
+        t.set_editor_property("destination_path", hedef)
+        t.set_editor_property("automated", True)
+        t.set_editor_property("replace_existing", True)
+        t.set_editor_property("save", True)
+        tools.import_asset_tasks([t])
+        mesh = bul()
+        if not mesh:
+            log("   UYARI: gotik sutun aktarilamadi, duz silindir kullaniliyor")
+            return None
+        try:
+            body = mesh[0].get_editor_property("body_setup")
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+            eal.save_loaded_asset(mesh[0])
+        except Exception as e:
+            log("   carpisma ayarlanamadi (onemsiz): %s" % e)
+    return mesh[0]
 
 
 # ---------- sahne ----------
@@ -291,6 +325,7 @@ def gorunmez_duvar(a):
     if not OYUNCULARI_DA_ENGELLE:
         c.set_collision_response_to_channel(unreal.CollisionChannel.ECC_PAWN, unreal.CollisionResponseType.ECR_IGNORE)
     c.set_editor_property("cast_shadow", False)
+    c.set_visibility(False, True)  # editorde de oyunda da gorunmez; carpisma calismaya devam eder
     a.set_actor_hidden_in_game(True)
 
 
@@ -299,6 +334,7 @@ def calistir():
     m_kure = kure_malzemesi()
     m_isin = isin_malzemesi()
     m_sutun = sutun_malzemesi()
+    gotik = gotik_sutun()
 
     log("2/4 Harita ve konum...")
     haritayi_ac()
@@ -324,11 +360,18 @@ def calistir():
         # sutun kosedeki zeminden baslar, ustu her kosede ayni yukseklikte biter
         taban = min(zemin_z(x, y, cz), cz)
         boy = cz + SUTUN_BOY - taban
-        koy_mesh("Sutun_" + ad, silindir, V(x, y, taban + boy / 2), unreal.Rotator(0, 0, 0),
-                 V(SUTUN_CAP / 50, SUTUN_CAP / 50, boy / 100), m_sutun)
+        if gotik:
+            # model tabani 0'da, kure yuvasi 700 cm'de; sivri kuleler kurenin cevresinde yukselir
+            s = SUTUN_CAP / 60.0
+            yon = math.degrees(math.atan2(y - cy, x - cx))  # kuleler her kosede ayni yone baksin
+            koy_mesh("Sutun_" + ad, gotik, V(x, y, taban), unreal.Rotator(0, 0, yon), V(s, s, boy / 700.0), m_sutun)
+        else:
+            koy_mesh("Sutun_" + ad, silindir, V(x, y, taban + boy / 2), unreal.Rotator(0, 0, 0),
+                     V(SUTUN_CAP / 50, SUTUN_CAP / 50, boy / 100), m_sutun)
         mi_k = ornek("MI_Kure_" + ad, m_kure, vektorler={"Renk": renk})
-        halka = koy_mesh("Halka_" + ad, silindir, V(x, y, cz + SUTUN_BOY + 5), unreal.Rotator(0, 0, 0),
-                         V(SUTUN_CAP * 1.4 / 50, SUTUN_CAP * 1.4 / 50, 0.1), mi_k)
+        # kure yuvasinda parlayan ince disk
+        halka = koy_mesh("Halka_" + ad, silindir, V(x, y, cz + SUTUN_BOY + 1), unreal.Rotator(0, 0, 0),
+                         V(SUTUN_CAP * 0.8 / 50, SUTUN_CAP * 0.8 / 50, 0.02), mi_k)
         carpisma_yok(halka)
         k = koy_mesh("Kure_" + ad, kure, V(x, y, kure_z), unreal.Rotator(0, 0, 0),
                      V(KURE_CAP / 50, KURE_CAP / 50, KURE_CAP / 50), mi_k)
