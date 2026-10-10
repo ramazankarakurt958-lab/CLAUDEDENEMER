@@ -12,7 +12,7 @@ ASET_KLASORLERI = ["/Game/MAPS/Asetler"]
 YAKIN = 4000.0       # cm - merkezden bu mesafeye kadar 1. halka: tam kalite
 ORTA = 10000.0       # cm - 2. halka: kucuk nesnelerin golgesi kapanir; disi 3. halka: efektler de seyrelir
 DOKU_SINIRI = 2048   # dekor dokulari en fazla bu cozunurlukte (4K gereksiz bellek yer)
-SIS_AYARLA = True    # uzak cevre siste yumusakca kaybolsun, oyun alani net kalsin
+SIS_AYARLA = False   # True: sisi buradan ayarla (BolgeSahasi.py bulut denizi sisini kendisi kurar)
 # -----------------------------------------
 
 eal = unreal.EditorAssetLibrary

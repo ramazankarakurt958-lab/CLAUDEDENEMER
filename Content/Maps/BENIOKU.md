@@ -21,3 +21,9 @@ Oyunun bu haritayla açılması için: **Edit → Project Settings → Maps & Mo
 
     exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ElementSahasi.py", encoding="utf-8").read())
     exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/KaliteKademe.py", encoding="utf-8").read())
+
+## Dört element bölgesi
+
+- `Arena/BolgeSahasi.py`: arenayı dört bölgeye göre boyar (ateş/lav, su/buz, toprak/orman, hava/mermer). Bölgelere dekor ekler: alevler, kıvılcım, duman, lav kayaları, buz kristalleri, şelaleler, ağaçlar, yosunlu kayalar, sis ve uçan kayalar. Ayrıca çevreye uçan adalar, köprülere gotik meşaleler, arenanın altına bulut denizi kurar. Önce `ElementSahasi.py` çalışmış olmalı.
+
+    exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/BolgeSahasi.py", encoding="utf-8").read())

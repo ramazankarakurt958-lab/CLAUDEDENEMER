@@ -50,11 +50,13 @@ ETKILER = {
 }
 
 # Koseler saat yonunde: (+X,+Y) -> (+X,-Y) -> (-X,-Y) -> (-X,+Y). Sira degistirilebilir.
+# Siralama arenanin tribunlerine gore: kuleli iki tribun Ates ve Su, alcak olanlar Toprak ve Hava.
+# BolgeSahasi.py bolgeleri kurelerin yerine gore boyar; sirayi degistirirsen ikisini de yeniden calistir.
 ELEMENTLER = [
-    ("Ates",   unreal.LinearColor(1.00, 0.22, 0.02, 1)),
-    ("Su",     unreal.LinearColor(0.03, 0.40, 1.00, 1)),
     ("Toprak", unreal.LinearColor(0.12, 0.85, 0.15, 1)),
     ("Hava",   unreal.LinearColor(0.80, 0.90, 1.00, 1)),
+    ("Su",     unreal.LinearColor(0.03, 0.40, 1.00, 1)),
+    ("Ates",   unreal.LinearColor(1.00, 0.22, 0.02, 1)),
 ]
 KLASOR = "/Game/MAPS/ARENA/ElementSahasi"
 ON_EK = "ES_"
@@ -610,4 +612,6 @@ def calistir():
     log("TAMAM - Element sahasi kuruldu. Ayarlar dosyanin basinda (SAHA_BOY, SAHA_EN, SAHA_DONUS...).")
 
 
-calistir()
+# BolgeSahasi.py bu dosyayi sadece yardimci fonksiyonlari icin yukler (SADECE_YARDIMCI=True)
+if not globals().get("SADECE_YARDIMCI"):
+    calistir()
