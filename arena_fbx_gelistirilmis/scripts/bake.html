@@ -1,0 +1,25 @@
+<html><body style="margin:0"><script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">import*as T from'three';import{GLTFLoader}from'three/addons/loaders/GLTFLoader.js';
+const r=new T.WebGLRenderer();const g=await new GLTFLoader().loadAsync('/arena_full.glb');let mesh;g.scene.traverse(m=>{if(m.isMesh)mesh=m});
+const cam=new T.PerspectiveCamera(40,1,10,1000);const [az,el,dd,fov,tx,ty,tz,roll]=[-0.02125,0.42704,215,28,-3.6486,34.9766,-0.8509,0.03068];cam.fov=fov;cam.updateProjectionMatrix();
+cam.position.set(tx+dd*Math.sin(az)*Math.cos(el),ty+dd*Math.sin(el),tz+dd*Math.cos(az)*Math.cos(el));cam.lookAt(tx,ty,tz);cam.rotateZ(roll);cam.updateMatrixWorld();
+const D=2048;const drt=new T.WebGLRenderTarget(D,D);drt.depthTexture=new T.DepthTexture(D,D);drt.depthTexture.type=T.UnsignedIntType;
+const s1=new T.Scene();const m1=mesh.clone();m1.material=new T.MeshBasicMaterial({side:T.DoubleSide});s1.add(m1);r.setRenderTarget(drt);r.render(s1,cam);
+const ref=await new T.TextureLoader().loadAsync('/ref.jpg');ref.colorSpace=T.NoColorSpace;
+const S=4096;const rt=new T.WebGLRenderTarget(S,S);
+const mat=new T.ShaderMaterial({side:T.DoubleSide,uniforms:{dep:{value:drt.depthTexture},ref:{value:ref},VP:{value:new T.Matrix4().multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse)},cp:{value:cam.position},near:{value:cam.near},far:{value:cam.far}},
+vertexShader:`varying vec3 wp;varying vec3 wn;void main(){wp=position;wn=normal;gl_Position=vec4(uv.x*2.-1.,uv.y*2.-1.,0.,1.);}`,
+fragmentShader:`uniform sampler2D dep;uniform sampler2D ref;uniform mat4 VP;uniform vec3 cp;uniform float near,far;varying vec3 wp;varying vec3 wn;
+float lin(float d){float z=d*2.-1.;return 2.*near*far/(far+near-z*(far-near));}
+float bg(vec2 u){vec3 c=texture2D(ref,u).rgb;return step(.90,min(c.r,min(c.g,c.b)));}
+void main(){vec4 c=VP*vec4(wp,1.);vec3 n=c.xyz/c.w;vec2 su=n.xy*.5+.5;float w=0.;
+ if(all(greaterThan(su,vec2(0.)))&&all(lessThan(su,vec2(1.)))){
+  float zf=lin(n.z*.5+.5);float zd=lin(texture2D(dep,su).r);
+  float vis=1.-smoothstep(.15,.6,zf-zd);
+  float f=abs(dot(normalize(wn),normalize(cp-wp)));float fac=smoothstep(.12,.45,f);
+  float e=0.;for(int i=-2;i<=2;i++)for(int j=-2;j<=2;j++)e=max(e,bg(su+vec2(float(i),float(j))*2.5/1024.));
+  w=vis*fac*(1.-e);}
+ gl_FragColor=vec4(texture2D(ref,su).rgb,0.004+w*.996);}`});
+const s2=new T.Scene();const m2=new T.Mesh(mesh.geometry,mat);m2.frustumCulled=false;s2.add(m2);
+r.setRenderTarget(rt);r.setClearColor(0,0);r.clear();r.render(s2,new T.Camera());
+const px=new Uint8Array(S*S*4);r.readRenderTargetPixels(rt,0,0,S,S,px);await fetch('/up/bake.rgba',{method:'POST',body:px});window.done=1</script></body></html>

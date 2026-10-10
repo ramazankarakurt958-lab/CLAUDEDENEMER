@@ -23,9 +23,9 @@ def write(path,V,N,UV,F,tex):
        'normalTexture':{'index':1},'occlusionTexture':{'index':2,'strength':0.0},'doubleSided':True}]
     js=json.dumps(j,separators=(',',':')).encode();js+=b' '*((4-len(js)%4)%4);bb=b''.join(bins)
     open(path,'wb').write(struct.pack('<III',0x46546C67,2,28+len(js)+len(bb))+struct.pack('<I4s',len(js),b'JSON')+js+struct.pack('<I4s',len(bb),b'BIN\0')+bb)
-TEX=['t_basecolor.jpg','t_normal.jpg','t_orm.jpg']
+TEX=[__import__('os').environ.get('BC','t_basecolor.jpg'),'t_normal.jpg','t_orm.jpg']
 if __name__=='__main__':
-    d=np.load('clean.npz');write('arena_full.glb',d['V'],d['N'],d['UV'],d['F'],TEX)
+    d=np.load(__import__('os').environ.get('SRC','clean.npz'));write(__import__('os').environ.get('OUTF','arena_full.glb'),d['V'],d['N'],d['UV'],d['F'],TEX)
     import pymeshlab
     ms=pymeshlab.MeshSet()
     m=pymeshlab.Mesh(vertex_matrix=d['V'].astype(np.float64),face_matrix=d['F'].astype(np.int32),v_tex_coords_matrix=d['UV'].astype(np.float64))
@@ -40,4 +40,4 @@ if __name__=='__main__':
     fn=np.cross(V[Fc[:,1]]-V[Fc[:,0]],V[Fc[:,2]]-V[Fc[:,0]]);vn=np.zeros_like(V)
     for k in range(3):np.add.at(vn,Fc[:,k],fn)
     vn/=np.linalg.norm(vn,axis=1,keepdims=True)+1e-12
-    write('arena_game.glb',NV,vn[vi],UV,F2,TEX);print('game tris',len(F2),'verts',len(NV))
+    write(__import__('os').environ.get('OUTG','arena_game.glb'),NV,vn[vi],UV,F2,TEX);print('game tris',len(F2),'verts',len(NV))

@@ -1,0 +1,15 @@
+<html><body style="margin:0"><script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">import*as T from'three';import{GLTFLoader}from'three/addons/loaders/GLTFLoader.js';
+const W=200;const r=new T.WebGLRenderer({preserveDrawingBuffer:true});r.setSize(W,W);r.setPixelRatio(1);document.body.appendChild(r.domElement);
+const s=new T.Scene();s.background=new T.Color(1,1,1);const black=new T.MeshBasicMaterial({color:0,side:T.DoubleSide});
+const img=new Image();img.src='/ref.jpg';await img.decode();const cv=document.createElement('canvas');cv.width=cv.height=W;const cx=cv.getContext('2d');cx.drawImage(img,0,0,W,W);
+const rd=cx.getImageData(0,0,W,W).data;const ref=new Uint8Array(W*W);for(let i=0;i<W*W;i++)ref[i]=Math.min(rd[4*i],rd[4*i+1],rd[4*i+2])<230?1:0;
+const g=await new GLTFLoader().loadAsync('/arena_game.glb');g.scene.traverse(m=>{if(m.isMesh)m.material=black});s.add(g.scene);
+const cam=new T.PerspectiveCamera(40,1,1,2000);const px=new Uint8Array(W*W*4);
+function setCam(p){const[az,el,d,fov,tx,ty,tz,roll]=p;cam.fov=fov;cam.updateProjectionMatrix();const t=new T.Vector3(tx,ty,tz);
+ cam.position.set(tx+d*Math.sin(az)*Math.cos(el),ty+d*Math.sin(el),tz+d*Math.cos(az)*Math.cos(el));cam.up.set(0,1,0);cam.lookAt(t);cam.rotateZ(roll)}
+function score(p){setCam(p);r.render(s,cam);const gl=r.getContext();gl.readPixels(0,0,W,W,gl.RGBA,gl.UNSIGNED_BYTE,px);let I=0,U=0;
+ for(let y=0;y<W;y++)for(let x=0;x<W;x++){const a=px[4*((W-1-y)*W+x)]<128?1:0,b=ref[y*W+x];I+=a&b;U+=a|b}return I/U}
+let p=[0,.6,140,40,0,8,0,0],best=score(p);const st=[.08,.08,15,6,4,3,4,.04];
+for(let it=0;it<7;it++){for(let k=0;k<p.length;k++)for(const sg of[1,-1]){let imp=true;while(imp){imp=false;const q=p.slice();q[k]+=sg*st[k];const sc=score(q);if(sc>best){best=sc;p=q;imp=true}}}for(let k=0;k<st.length;k++)st[k]*=.55}
+window.res={p,best};</script></body></html>
