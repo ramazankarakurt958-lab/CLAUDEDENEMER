@@ -63,6 +63,15 @@ Puruz, Normal; YosunMiktar (cok/az yosun), YosunUst (ust yuzlerde fazlalik), Yos
 AtesLavGucu (catlak isigi), AtesKor (lavdan uzak catlaklarin sonuk isigi).
 Derlenmezse her katman tek basina denenir: su zemini ve kaplamalar birbirini etkilemeden sadelesir.
 
+## Orta platform: duz zemin + altin kakma (MerkezPlatform.py)
+Platformun ustune tamamen duz tas zemin diski (eski kabartmalarin hemen ustunde, kenarinda kisa etek; halkalarda dilimli
+doseme, T_Merkez_D/N) ve zeminle ayni hizada duz altin seritler: halkalar, ic ice yildizlar, isinlar, dis bantta run
+halkasi (SM_MerkezRun). Kopruler ve kenar bandindaki direk/mesale kaideleri kaplanmaz. Zemin carpismali (top ve oyuncu
+duz zeminde), altin carpismasiz. Uretim: `araclar/bolge_doku/merkez_desen.py` (ortak yollar), `merkez_doku.py`,
+`merkez_zemin3d.py`, `merkez_run3d.py`. Onizleme: Kaynak/M_Merkez_onizleme.jpg (sol ust referans).
+Ayar: /Game/Maps/Arena/Merkez/MI_MerkezZemin (Parlaklik, Puruzluluk, NormalGucu), MI_MerkezAltin (AltinRenk, Puruzluluk,
+Isik). Sonra ElementSahasi.py'yi tekrar calistir (saha cizgileri yeni zeminin ustune otursun). Kaldirmak: KALDIR = True.
+
 ## Fab merdivenleri (FabMerdiven.py)
 Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme
 bloklari arasinda) dizilir: her dilimde iki sira, on sira 28 m yurume yolundan, arka sira onun ustunden duvara.
