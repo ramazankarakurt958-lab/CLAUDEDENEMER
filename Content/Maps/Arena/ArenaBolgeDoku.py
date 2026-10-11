@@ -195,6 +195,12 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
         bag(a, ca, e, "")
         return e
 
+    def ortak_ornekleyici(t):
+        try:
+            t.set_editor_property("sampler_source", unreal.SamplerSourceMode.SSM_WRAP_WORLD_GROUP_SETTINGS)
+        except Exception:
+            pass
+
     taban_renk = puruz_son = normal_son = emis_son = None
 
     uv = ifade(unreal.MaterialExpressionTextureCoordinate, -1400, 300)
@@ -276,6 +282,8 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
         for t in (t_zd, t_zn, t_zr):
             bag(zuv, "", t, "UVs")
         t_zb = doku(zB, ST.SAMPLERTYPE_LINEAR_COLOR, X - 500, 1600)
+        for t in (t_zd, t_zn, t_zr, t_zb):
+            ortak_ornekleyici(t)
         bag(carp(wxy, sabit(1.0 / 3000.0, X - 850, 1600), X - 700, 1600), "", t_zb, "UVs")
         # zemin agirligi: bolge (maske.A) * yukari bakma * ZeminGucu
         nz = bilesen(ifade(unreal.MaterialExpressionVertexNormalWS, X - 1000, 1800), ("b",), X - 850, 1800)
@@ -304,6 +312,7 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
             hiz.set_editor_property("g", hy)
             uvs = topla(carp(wxy, sabit(1.0 / bolen, X - 850, y), X - 700, y), carp(zaman, hiz, X - 700, y + 80), X - 550, y)
             t = doku(zW, ST.SAMPLERTYPE_NORMAL, X - 400, y)
+            ortak_ornekleyici(t)
             bag(uvs, "", t, "UVs")
             return t
         r1 = kayan(300.0, 0.03, 0.02, 2100)
@@ -361,6 +370,31 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
     return mat
 
 
+def derlendi_mi(mat):
+    """Derleme hatasinda piksel shader komut sayisi 0 olur. Olculemezse derlendi say."""
+    try:
+        ist = mel.get_statistics(mat)
+        n = ist.get_editor_property("num_pixel_shader_instructions")
+        log("   piksel shader komutu: %d" % n)
+        return n > 0
+    except Exception as e:
+        log("   derleme kontrol edilemedi (onemsiz): %s" % e)
+        return True
+
+
+def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin):
+    """Zemin katmaniyla kurmayi dener; Python ya da derleme hatasinda zeminsiz kurar (arena asla dokusuz kalmaz)."""
+    if zemin:
+        try:
+            mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
+            if derlendi_mi(mat):
+                return mat, True
+            unreal.log_error("[Arena] Zemin katmani derlenemedi - zeminsiz kuruluyor. Output Log'daki LogMaterial hatalarini gonder.")
+        except Exception as e:
+            unreal.log_error("[Arena] Zemin katmani kurulamadi (%s) - zeminsiz kuruluyor. Bu satiri gonder." % e)
+    return malzeme(renk, normal, orm, detay_d, detay_n, maske, None), False
+
+
 def calistir():
     aktor, sm = arena_aktoru()
     if GERI_AL:
@@ -381,7 +415,8 @@ def calistir():
     zemin = zemin_dokulari() if maske else None
     log("   su tribunu zemini: %s" % ("var" if zemin else "yok"))
     log("2/3 Malzeme: M_ArenaBolge")
-    mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
+    mat, zemin_var = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
+    log("   su tribunu zemini: %s" % ("eklendi" if zemin_var else "EKLENEMEDI (arena zeminsiz kuruldu)"))
     mi_yol = HEDEF + "/MI_ArenaBolge"
     mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
         tools.create_asset("MI_ArenaBolge", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
