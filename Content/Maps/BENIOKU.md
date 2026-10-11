@@ -41,3 +41,8 @@ Ayar: `/Game/Maps/Arena/Selale/MI_Selale_Govde`, `_Serpinti`, `_Sis` (Parlaklik,
 Kulelerden akan dereler: su tribunundeki kuleler yukseklik haritasindan bulunur (`araclar/bolge_doku/kule.py`); sahaya bakan
 yuzlerin tepesinden baslayan dereler yercekimiyle duvari izler, cikintidan dokulur, tribune degdiginde biter (`akinti.py`).
 Tribunlere ve kulelerin arka yuzlerine su eklenmez.
+
+## Su tribunu zemini (ArenaBolgeDoku.py icinde)
+Su tribununun yukari bakan yuzeylerine dunyaya hizali net tas levha (Kaynak/T_SuZemin_D/N/R, 4 m'de bir tekrar),
+yuksek teraslarda ve kule tepelerinde yansitan, dalgalanan, hafif parlayan su birikintileri. Kopruler ve orta platform haric.
+Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (kucuk = daha cok su), ZeminSuParilti.
