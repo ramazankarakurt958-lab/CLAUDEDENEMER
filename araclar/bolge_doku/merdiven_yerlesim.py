@@ -5,8 +5,8 @@
 #   on      : modulun on-alt-orta noktasi (en alt basamagin onu, taban yuksekliginde) [x, y, z]
 #   yon     : yukselis yonu (yatay, duvara dogru) [x, 0, z]
 #   derinlik, genislik, yukseklik: modulun kaplayacagi olculer (m) -> UE'de olcek = olcu / modulun kendi olcusu
-# Girdi: game.glb (arena), duvar.npy (aci basina ic kenar / duvar yaricapi / teras yuksekligi; bu dosyadaki
-# duvar_olc() uretir).
+# Girdi: game.glb (arena). Cikti FabMerdiven.py'nin sonundaki YERLESIM bloguna yazilir:
+#   python3 merdiven_yerlesim.py game.glb ../../Content/Maps/Arena/FabMerdiven.py
 import json
 import sys
 import numpy as np
@@ -148,6 +148,26 @@ def yerlesim(d, m=None):
     return moduller
 
 
+ALANLAR = ("dilim", "sira", "sutun", "on", "yon", "derinlik", "genislik", "yukseklik")
+
+
+def betige_yaz(sonuc, betik):
+    """Yerlesimi Unreal scriptinin YERLESIM bloguna Python sabiti olarak yazar."""
+    satir = ["ALANLAR = %r" % (ALANLAR,), "YERLESIM = {"]
+    for ad, mod in sonuc.items():
+        satir.append("    %r: [" % ad)
+        for o in mod:
+            satir.append("        (%s)," % ", ".join(json.dumps(o[k]) for k in ALANLAR))
+        satir.append("    ],")
+    satir.append("}")
+    s = open(betik, encoding="utf-8").read()
+    bas, son = "# --- YERLESIM BASI", "# --- YERLESIM SONU ---"
+    i = s.index("\n", s.index(bas)) + 1
+    j = s.index(son)
+    open(betik, "w", encoding="utf-8").write(s[:i] + "\n".join(satir) + "\n" + s[j:])
+    print("yazildi:", betik)
+
+
 if __name__ == "__main__":
     # iki dizilis: "dogal" (modulun kendi egimine yakin, ustte set duvari kalir), "dik" (terasa kadar cikar)
     oyun = sys.argv[1] if len(sys.argv) > 1 else "game.glb"
@@ -160,3 +180,5 @@ if __name__ == "__main__":
         sonuc[ad] = yerlesim(d, m)
     json.dump(sonuc, open("merdiven_yerlesim.json", "w"), separators=(",", ":"))
     print("modul:", {k: len(v) for k, v in sonuc.items()})
+    if len(sys.argv) > 2:
+        betige_yaz(sonuc, sys.argv[2])

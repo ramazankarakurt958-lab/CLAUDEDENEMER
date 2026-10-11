@@ -1,12 +1,12 @@
 # Unreal Engine 5 - Fab'dan indirilen "Castle Stairs" (Megascans scfdy) merdivenlerini ates ve su tribunlerine dizer.
 # Her oturma diliminde (ara bolmeler arasinda) iki sira modul: on sira 28 m yurume yolundan baslar, arka sira onun
 # ustunden duvara cikar. Moduller tribun duvarina diktir, yan yana hafif binerek bosluksuz dizilir.
-# Yerlesim: Kaynak/merdiven_yerlesim.json (araclar/bolge_doku/merdiven_yerlesim.py, arena glTF eksenleri, metre).
+# Yerlesim: dosyanin sonundaki YERLESIM (araclar/bolge_doku/merdiven_yerlesim.py yazar; arena glTF eksenleri, metre).
+# Icerik klasorune json koyulmaz (Unreal onu DataTable olarak ice aktarmaya kalkiyordu).
 # Eski uretilmis basamaklar (BK_Basamak) silinir.
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/FabMerdiven.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz. Kaldirmak icin KALDIR = True.
-import json
 import math
 import os
 import unreal
@@ -273,7 +273,19 @@ def fark(a, b):
     return tuple(a[i] - b[i] for i in range(3))
 
 
+def eski_json_temizle():
+    """Onceki surumun Kaynak'a indirdigi json'u ve Unreal'in ondan yaptigi varligi kaldir (DataTable sorusu cikmasin)."""
+    yol = os.path.join(KAYNAK, "merdiven_yerlesim.json")
+    if os.path.isfile(yol):
+        os.remove(yol)
+        log("   Kaynak/merdiven_yerlesim.json silindi (artik scriptin icinde)")
+    for v in ("/Game/Maps/Arena/Kaynak/merdiven_yerlesim",):
+        if eal.does_asset_exist(v):
+            eal.delete_asset(v)
+
+
 def calistir():
+    eski_json_temizle()
     arena = arena_aktoru()
     n = 0
     for a in eas.get_all_level_actors():
@@ -305,15 +317,10 @@ def calistir():
     alfa = math.atan2(isaret if ek == "y" else 0.0, isaret if ek == "x" else 0.0)
     malz = bolge_malzemeleri(sm)
 
-    log("3/4 Yerlesim okunuyor (%s)..." % DIZILIS)
-    yol = os.path.join(KAYNAK, "merdiven_yerlesim.json")
-    if not os.path.isfile(yol):
-        hata("merdiven_yerlesim.json bulunamadi: " + KAYNAK)
-    with open(yol, encoding="utf-8") as f:
-        tum = json.load(f)
-    if DIZILIS not in tum:
-        hata("DIZILIS '%s' yok; secenekler: %s" % (DIZILIS, ", ".join(tum)))
-    moduller = tum[DIZILIS]
+    log("3/4 Yerlesim (%s)..." % DIZILIS)
+    if DIZILIS not in YERLESIM:
+        hata("DIZILIS '%s' yok; secenekler: %s" % (DIZILIS, ", ".join(YERLESIM)))
+    moduller = [dict(zip(ALANLAR, m)) for m in YERLESIM[DIZILIS]]
 
     log("4/4 %d modul diziliyor..." % len(moduller))
     dw = ues.get_editor_world()
@@ -357,5 +364,55 @@ def calistir():
     log("TAMAM - %d Fab merdiveni dizildi (Outliner: %s). Yon ters ise YUKSELIS ayarla; DIZILIS = \"dik\" terasa kadar cikar."
         % (len(moduller), KLASOR))
 
+
+# --- YERLESIM BASI (araclar/bolge_doku/merdiven_yerlesim.py yazar, elle degistirme) ---
+ALANLAR = ('dilim', 'sira', 'sutun', 'on', 'yon', 'derinlik', 'genislik', 'yukseklik')
+YERLESIM = {
+    'dogal': [
+        ("ates_1", 0, 0, [-24.519, 27.97, -15.311], [-0.987, 0.0, -0.1607], 1.902, 5.554, 1.734),
+        ("ates_1", 1, 0, [-26.389, 29.674, -15.615], [-0.987, 0.0, -0.1607], 1.902, 5.907, 1.704),
+        ("ates_2", 0, 0, [-19.975, 27.97, -20.627], [-0.8259, 0.0, -0.5638], 2.761, 4.479, 1.933),
+        ("ates_2", 1, 0, [-22.243, 29.873, -22.179], [-0.8259, 0.0, -0.5638], 2.761, 5.018, 1.903),
+        ("ates_2", 0, 1, [-17.527, 27.97, -23.561], [-0.7043, 0.0, -0.7099], 2.762, 4.492, 1.933),
+        ("ates_2", 1, 1, [-19.467, 29.873, -25.51], [-0.7043, 0.0, -0.7099], 2.762, 5.018, 1.903),
+        ("ates_3", 0, 0, [-11.744, 27.97, -29.039], [-0.5516, 0.0, -0.8341], 2.893, 4.656, 1.983),
+        ("ates_3", 1, 0, [-13.335, 29.923, -31.451], [-0.5516, 0.0, -0.8341], 2.893, 4.965, 1.953),
+        ("ates_3", 0, 1, [-8.477, 27.97, -31.886], [-0.4612, 0.0, -0.8873], 2.493, 4.701, 1.983),
+        ("ates_3", 1, 1, [-9.626, 29.923, -34.094], [-0.4612, 0.0, -0.8873], 2.493, 4.965, 1.953),
+        ("su_1", 0, 0, [6.897, 27.97, -31.682], [0.4281, 0.0, -0.9037], 2.531, 4.522, 1.983),
+        ("su_1", 1, 0, [7.981, 29.923, -33.961], [0.4281, 0.0, -0.9037], 2.531, 4.92, 1.953),
+        ("su_1", 0, 1, [9.873, 27.97, -29.01], [0.5651, 0.0, -0.825], 2.951, 4.439, 1.983),
+        ("su_1", 1, 1, [11.533, 29.923, -31.439], [0.5651, 0.0, -0.825], 2.951, 4.92, 1.953),
+        ("su_2", 0, 0, [15.736, 27.97, -23.618], [0.6909, 0.0, -0.723], 2.729, 4.702, 1.909),
+        ("su_2", 1, 0, [17.613, 29.849, -25.575], [0.6909, 0.0, -0.723], 2.729, 5.337, 1.879),
+        ("su_2", 0, 1, [18.405, 27.97, -20.732], [0.8393, 0.0, -0.5437], 2.622, 4.706, 1.909),
+        ("su_2", 1, 1, [20.589, 29.849, -22.15], [0.8393, 0.0, -0.5437], 2.622, 5.336, 1.879),
+        ("su_3", 0, 0, [22.228, 27.97, -14.909], [0.9414, 0.0, -0.3373], 2.27, 4.528, 1.655),
+        ("su_3", 1, 0, [24.359, 29.595, -15.672], [0.9414, 0.0, -0.3373], 2.27, 4.879, 1.625),
+    ],
+    'dik': [
+        ("ates_1", 0, 0, [-24.519, 27.97, -15.311], [-0.987, 0.0, -0.1607], 1.902, 5.554, 3.135),
+        ("ates_1", 1, 0, [-26.389, 31.075, -15.615], [-0.987, 0.0, -0.1607], 1.902, 5.907, 3.105),
+        ("ates_2", 0, 0, [-19.975, 27.97, -20.627], [-0.8259, 0.0, -0.5638], 2.761, 4.479, 2.971),
+        ("ates_2", 1, 0, [-22.243, 30.911, -22.179], [-0.8259, 0.0, -0.5638], 2.761, 5.018, 2.941),
+        ("ates_2", 0, 1, [-17.527, 27.97, -23.561], [-0.7043, 0.0, -0.7099], 2.762, 4.492, 2.971),
+        ("ates_2", 1, 1, [-19.467, 30.911, -25.51], [-0.7043, 0.0, -0.7099], 2.762, 5.018, 2.941),
+        ("ates_3", 0, 0, [-11.744, 27.97, -29.039], [-0.5516, 0.0, -0.8341], 2.893, 4.656, 3.067),
+        ("ates_3", 1, 0, [-13.335, 31.007, -31.451], [-0.5516, 0.0, -0.8341], 2.893, 4.965, 3.037),
+        ("ates_3", 0, 1, [-8.477, 27.97, -31.886], [-0.4612, 0.0, -0.8873], 2.493, 4.701, 3.067),
+        ("ates_3", 1, 1, [-9.626, 31.007, -34.094], [-0.4612, 0.0, -0.8873], 2.493, 4.965, 3.037),
+        ("su_1", 0, 0, [6.897, 27.97, -31.682], [0.4281, 0.0, -0.9037], 2.531, 4.522, 3.074),
+        ("su_1", 1, 0, [7.981, 31.014, -33.961], [0.4281, 0.0, -0.9037], 2.531, 4.92, 3.044),
+        ("su_1", 0, 1, [9.873, 27.97, -29.01], [0.5651, 0.0, -0.825], 2.951, 4.439, 3.074),
+        ("su_1", 1, 1, [11.533, 31.014, -31.439], [0.5651, 0.0, -0.825], 2.951, 4.92, 3.044),
+        ("su_2", 0, 0, [15.736, 27.97, -23.618], [0.6909, 0.0, -0.723], 2.729, 4.702, 2.807),
+        ("su_2", 1, 0, [17.613, 30.747, -25.575], [0.6909, 0.0, -0.723], 2.729, 5.337, 2.777),
+        ("su_2", 0, 1, [18.405, 27.97, -20.732], [0.8393, 0.0, -0.5437], 2.622, 4.706, 2.807),
+        ("su_2", 1, 1, [20.589, 30.747, -22.15], [0.8393, 0.0, -0.5437], 2.622, 5.336, 2.777),
+        ("su_3", 0, 0, [22.228, 27.97, -14.909], [0.9414, 0.0, -0.3373], 2.27, 4.528, 2.787),
+        ("su_3", 1, 0, [24.359, 30.727, -15.672], [0.9414, 0.0, -0.3373], 2.27, 4.879, 2.757),
+    ],
+}
+# --- YERLESIM SONU ---
 
 calistir()

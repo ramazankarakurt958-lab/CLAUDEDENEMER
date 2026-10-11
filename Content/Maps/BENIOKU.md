@@ -53,7 +53,8 @@ zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yaza
 Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme
 bloklari arasinda) dizilir: her dilimde iki sira, on sira 28 m yurume yolundan, arka sira onun ustunden duvara.
 Moduller duvar egrisine diktir; olcekleri dilimin derinligine ve yuksekligine gore ayarlanir. Eski BK_Basamak silinir.
-Yerlesim: `araclar/bolge_doku/merdiven_yerlesim.py` -> Kaynak/merdiven_yerlesim.json (iki dizilis).
+Yerlesim: `araclar/bolge_doku/merdiven_yerlesim.py game.glb Content/Maps/Arena/FabMerdiven.py` scriptin sonundaki
+YERLESIM bloguna yazar (iki dizilis). Icerik klasorune json konmaz: Unreal onu DataTable olarak aktarmaya kalkar.
 Eksenler: Kaynak/SM_EksenIsaret.glb ice aktarilip kutusundan glTF -> UE eksen eslemesi okunur.
 Ayarlar (dosya basi): DIZILIS ("dogal" = kendi egimine yakin, ustte set duvari; "dik" = terasa kadar),
 YUKSELIS (yon ters cikarsa "+x"/"-x"/"+y"/"-y"), RENK (malzemede Tint varsa bolge tonu), KALDIR.
