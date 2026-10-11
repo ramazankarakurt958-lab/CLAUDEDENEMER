@@ -49,6 +49,15 @@ Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (ku
 Derlenmezse script kendiliginden sadelestirir: tam (dalgali birikinti) -> birikintili (dalgasiz) -> sadece levha ->
 zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yazar.
 
+## Hava tribunu mermer kaplamasi (ArenaBolgeDoku.py icinde)
+Hava bolgesine (Kaynak/T_ArenaHavaMaske.png) dunyaya hizali, ucyonlu (duvar + zemin) kesme mermer bloklar: 50 cm'lik
+siralar, 0.8-1.4 m bloklar, ince derz, cilali yuzey (Kaynak/T_Mermer_D: renk + alfa puruzluluk, T_Mermer_N).
+Eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur. Uretim: `araclar/bolge_doku/mermer_doku.py`,
+`hava_maske.py`. Onizleme: Kaynak/M_Mermer_onizleme.jpg (sol ust referans).
+Ayar: MI_ArenaBolge -> MermerGucu (0 = kapali), MermerParlaklik, MermerTon, MermerOlcek (cm, blok buyuklugu),
+MermerAO (eski golgeler), MermerAOOrta, MermerPuruz (cila), MermerNormal (derz derinligi).
+Derlenmezse sorunlu katman ayri bulunur: su zemini ve mermer birbirini etkilemeden sadelesir.
+
 ## Fab merdivenleri (FabMerdiven.py)
 Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme
 bloklari arasinda) dizilir: her dilimde iki sira, on sira 28 m yurume yolundan, arka sira onun ustunden duvara.

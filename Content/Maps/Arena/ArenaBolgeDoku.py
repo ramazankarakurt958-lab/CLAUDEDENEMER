@@ -6,6 +6,8 @@
 #        A=su tribunu zemin bolgesi.
 # Su tribunu zemini: yukari bakan yuzlere dunyaya hizali net tas levha (T_SuZemin_*), yuksek teraslarda ve kule
 # tepelerinde parlayan/yansitan dalgali su birikintileri.
+# Hava tribunu: Kaynak/T_ArenaHavaMaske.png bolgesinde dunyaya hizali ucyonlu kesme mermer bloklar (T_Mermer_D/N),
+# duvarlar dahil derzli kusursuz kaplama; eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur.
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())
 # Geri almak icin arenaya tekrar MI_ArenaTas verilir (dosyanin sonundaki GERI_AL'a bak).
@@ -121,7 +123,26 @@ def zemin_dokulari():
     return sonuc
 
 
-def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3):
+def mermer_dokulari():
+    """Hava tribunu mermer kaplamasi: (bolge maskesi, renk+puruzluluk, normal); biri eksikse katman atlanir."""
+    sonuc = []
+    for dosya, tur in (("T_ArenaHavaMaske.png", "maske"), ("T_Mermer_D.png", "renk"), ("T_Mermer_N.png", "normal")):
+        d = aktar(dosya)
+        if not d:
+            log("   %s yok - mermer kaplama eklenmeyecek" % dosya)
+            return None
+        d.set_editor_property("srgb", tur == "renk")          # renk dokusunun alfasi (puruzluluk) zaten dogrusal
+        if tur == "normal":
+            d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
+        elif tur == "maske":
+            d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+        d.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+        eal.save_loaded_asset(d)
+        sonuc.append(d)
+    return sonuc
+
+
+def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, mermer=None, mseviye=2):
     """M_ArenaTas ile ayni yapi, renk dokusu degistirilebilir parametre (Renk)."""
     yol = HEDEF + "/M_ArenaBolge"
     if eal.does_asset_exist(yol):
@@ -359,6 +380,104 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3):
         e = topla(e, isik, X + 1250, 2300) if e else isik
         return r, (pr, ""), n, e
 
+    def mermer_katmani(mermer, renk_in, puruz_in, normal_in, mseviye):
+        """Hava tribunu: dunyaya hizali ucyonlu kesme mermer bloklar (duvarlar dahil kusursuz kaplama).
+        mseviye 1: renk + puruzluluk  2: + blok/derz normali. Sadece skaler carpim, DotProduct ve AppendVector."""
+        hm, mD, mN = mermer
+        X, Y0 = 1800, 3000
+
+        def eksen(kaynak, v, x, y):
+            e = ifade(unreal.MaterialExpressionDotProduct, x, y)
+            bag(kaynak, "", e, "A")
+            bag(vek3(v[0], v[1], v[2], x - 150, y + 60), "", e, "B")
+            return e
+
+        def ekle(a, b, x, y, ca="", cb=""):
+            e = ifade(unreal.MaterialExpressionAppendVector, x, y)
+            bag(a, ca, e, "A")
+            bag(b, cb, e, "B")
+            return e
+
+        def bol(a, b, x, y):
+            e = ifade(unreal.MaterialExpressionDivide, x, y)
+            bag(a, "", e, "A")
+            bag(b, "", e, "B")
+            return e
+
+        def sinirla(a, alt, ust, x, y):
+            e1 = ifade(unreal.MaterialExpressionMax, x, y)
+            bag(a, "", e1, "A")
+            bag(sabit(alt, x - 100, y + 60), "", e1, "B")
+            e2 = ifade(unreal.MaterialExpressionMin, x + 100, y)
+            bag(e1, "", e2, "A")
+            bag(sabit(ust, x, y + 60), "", e2, "B")
+            return e2
+
+        # bolge agirligi: arena UV'sindeki maske * MermerGucu
+        t_hm = doku(hm, ST.SAMPLERTYPE_MASKS, X - 600, Y0 - 300)
+        ortak_ornekleyici(t_hm)
+        w = carp(t_hm, skaler("MermerGucu", 1.0, X - 600, Y0 - 150), X - 400, Y0 - 300, "R")
+        # dunya eksenleri ve ucyonlu agirliklar (n^4, toplami 1)
+        wp = ifade(unreal.MaterialExpressionWorldPosition, X - 1500, Y0)
+        wx, wy, wz = (eksen(wp, v, X - 1300, Y0 + i * 120) for i, v in enumerate(((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))))
+        nw = ifade(unreal.MaterialExpressionVertexNormalWS, X - 1500, Y0 + 500)
+        ag = []
+        for i, v in enumerate(((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))):
+            a = eksen(nw, v, X - 1300, Y0 + 500 + i * 120)
+            a2 = carp(a, a, X - 1050, Y0 + 500 + i * 120)                  # kare: isaret gerekmez
+            ag.append(carp(a2, a2, X - 950, Y0 + 500 + i * 120))
+        top = topla(topla(ag[0], ag[1], X - 850, Y0 + 560), ag[2], X - 750, Y0 + 600)
+        aX, aY, aZ = (bol(a, top, X - 650, Y0 + 500 + i * 120) for i, a in enumerate(ag))
+        # UV'ler: zemin (x, y), X'e bakan duvar (y, -z), Y'ye bakan duvar (x, -z); siralar duvarda yatay
+        k = bol(sabit(1.0, X - 1300, Y0 + 400), skaler("MermerOlcek", 600.0, X - 1300, Y0 + 460), X - 1150, Y0 + 400)
+        u_x, u_y = carp(wx, k, X - 1000, Y0), carp(wy, k, X - 1000, Y0 + 100)
+        u_z = carp(carp(wz, k, X - 1000, Y0 + 200), sabit(-1.0, X - 1000, Y0 + 260), X - 900, Y0 + 200)
+        uvlar = {"Z": ekle(u_x, u_y, X - 800, Y0), "X": ekle(u_y, u_z, X - 800, Y0 + 100), "Y": ekle(u_x, u_z, X - 800, Y0 + 200)}
+        agirlik = {"X": aX, "Y": aY, "Z": aZ}
+        D, N = {}, {}
+        for i, e in enumerate("XYZ"):
+            D[e] = doku(mD, ST.SAMPLERTYPE_COLOR, X - 500, Y0 + i * 250)
+            bag(uvlar[e], "", D[e], "UVs")
+            ortak_ornekleyici(D[e])
+        renk_m = topla(topla(carp(D["X"], aX, X - 250, Y0, "RGB"), carp(D["Y"], aY, X - 250, Y0 + 100, "RGB"), X - 100, Y0),
+                       carp(D["Z"], aZ, X - 250, Y0 + 200, "RGB"), X + 50, Y0)
+        puruz_m = topla(topla(carp(D["X"], aX, X - 250, Y0 + 300, "A"), carp(D["Y"], aY, X - 250, Y0 + 400, "A"), X - 100, Y0 + 300),
+                        carp(D["Z"], aZ, X - 250, Y0 + 500, "A"), X + 50, Y0 + 300)
+        # ton (vektor parametresinin R, G, B'si ayri alinip birlestirilir), parlaklik, eski dokunun golgesi (AO)
+        ton = ifade(unreal.MaterialExpressionVectorParameter, X - 100, Y0 - 300)
+        ton.set_editor_property("parameter_name", "MermerTon")
+        ton.set_editor_property("default_value", unreal.LinearColor(1.0, 0.93, 0.82, 1.0))
+        ton3 = ekle(ekle(ton, ton, X + 50, Y0 - 300, "R", "G"), ton, X + 150, Y0 - 300, "", "B")
+        lum = ifade(unreal.MaterialExpressionDotProduct, X - 100, Y0 - 500)
+        bag(renk_in, "", lum, "A")
+        bag(vek3(0.3, 0.59, 0.11, X - 250, Y0 - 450), "", lum, "B")
+        oran = sinirla(bol(lum, skaler("MermerAOOrta", 0.2, X - 100, Y0 - 400), X + 50, Y0 - 500), 0.35, 1.15, X + 150, Y0 - 500)
+        ao = karis(sabit(1.0, X + 300, Y0 - 560), oran, skaler("MermerAO", 0.3, X + 300, Y0 - 440), X + 450, Y0 - 500)
+        olcek = carp(skaler("MermerParlaklik", 0.42, X + 300, Y0 - 300), ao, X + 600, Y0 - 400)
+        renk_m = carp(carp(renk_m, ton3, X + 300, Y0, "", ""), olcek, X + 750, Y0)
+        r = karis(renk_in, renk_m, w, X + 900, Y0 - 100)
+        pr = karis(puruz_in[0], carp(puruz_m, skaler("MermerPuruz", 1.0, X + 50, Y0 + 400), X + 200, Y0 + 300), w,
+                   X + 900, Y0 + 300, puruz_in[1])
+        if mseviye < 2:
+            return r, (pr, ""), normal_in
+        # normal: her izdusumun dokusal egimi dunya eksenlerine: Z(u->+x, v->+y), X(u->+y, v->-z), Y(u->+x, v->-z)
+        for i, e in enumerate("XYZ"):
+            N[e] = doku(mN, ST.SAMPLERTYPE_NORMAL, X - 500, Y0 + 800 + i * 250)
+            bag(uvlar[e], "", N[e], "UVs")
+            ortak_ornekleyici(N[e])
+
+        def egim(e, kanal, y):
+            return carp(agirlik[e], N[e], X - 250, y, "", kanal)
+        px_ = topla(egim("Z", "R", Y0 + 800), egim("Y", "R", Y0 + 880), X - 100, Y0 + 800)
+        py_ = topla(egim("Z", "G", Y0 + 960), egim("X", "R", Y0 + 1040), X - 100, Y0 + 960)
+        pz_ = carp(topla(egim("X", "G", Y0 + 1120), egim("Y", "G", Y0 + 1200), X - 100, Y0 + 1120), sabit(-1.0, X - 100, Y0 + 1200), X + 50, Y0 + 1120)
+        egim3 = carp(ekle(ekle(px_, py_, X + 150, Y0 + 900), pz_, X + 250, Y0 + 950), skaler("MermerNormal", 1.0, X + 250, Y0 + 1050), X + 400, Y0 + 950)
+        nd = ifade(unreal.MaterialExpressionNormalize, X + 650, Y0 + 900)
+        bag(topla(ifade(unreal.MaterialExpressionVertexNormalWS, X + 400, Y0 + 850), egim3, X + 550, Y0 + 900), "", nd, "")
+        n_in = normal_in if normal_in else vek3(0.0, 0.0, 1.0, X + 650, Y0 + 800)
+        n = karis(n_in, dunyadan_tegete(nd, X + 800, Y0 + 900), w, X + 950, Y0 + 850)
+        return r, (pr, ""), n
+
     if normal or detay_n:
         parcalar = []
         if normal:
@@ -381,6 +500,8 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3):
     if t_m and zemin:
         zemin_katmani = su_zemini(zemin, t_m, taban_renk, puruz_son, normal_son, emis_son, seviye)
         taban_renk, puruz_son, normal_son, emis_son = zemin_katmani
+    if mermer and mseviye > 0:
+        taban_renk, puruz_son, normal_son = mermer_katmani(mermer, taban_renk, puruz_son, normal_son, mseviye)
 
     mel.connect_material_property(taban_renk, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(puruz_son[0], puruz_son[1], unreal.MaterialProperty.MP_ROUGHNESS)
@@ -410,22 +531,42 @@ def derlendi_mi(mat):
 ZEMIN_SEVIYE = {3: "tam (dalgali su birikintisi)", 2: "birikintili (dalgasiz)", 1: "sadece tas levha", 0: "EKLENEMEDI (arena zeminsiz kuruldu)"}
 
 
-def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin):
-    """Zemin katmanini tam kurmayi dener; derlenmezse bir sade seviyeyle tekrar dener, en son zeminsiz kurar
-    (arena asla dokusuz kalmaz). Doner: (malzeme, seviye)."""
-    if zemin:
-        for seviye in (3, 2, 1):
-            try:
-                mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, seviye)
-                if derlendi_mi(mat):
-                    return mat, seviye
-                unreal.log_error("[Arena] Zemin seviye %d derlenemedi - daha sade deneniyor. LogMaterial satirlarini gonder." % seviye)
-            except Exception as e:
-                unreal.log_error("[Arena] Zemin seviye %d kurulamadi (%s) - daha sade deneniyor. Bu satiri gonder." % (seviye, e))
+MERMER_SEVIYE = {2: "tam (bloklar + derz normali)", 1: "renk ve parlaklik (normalsiz)", 0: "EKLENEMEDI"}
+
+
+def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, mermer):
+    """Zemin ve mermer katmanlarini tam kurmayi dener; derlenmezse sorunlu katmani ayri ayri bulup sadelestirir,
+    en son ikisi de olmadan kurar (arena asla dokusuz kalmaz). Doner: (malzeme, zemin seviyesi, mermer seviyesi)."""
+    def dene(z, m):
+        try:
+            mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin if z else None, z or 3, mermer if m else None, m)
+            if derlendi_mi(mat):
+                return mat
+            unreal.log_error("[Arena] Zemin %d / mermer %d derlenemedi - sadelestiriliyor. LogMaterial satirlarini gonder." % (z, m))
+        except Exception as e:
+            unreal.log_error("[Arena] Zemin %d / mermer %d kurulamadi (%s) - sadelestiriliyor. Bu satiri gonder." % (z, m, e))
+        return None
+    zs = (3, 2, 1) if zemin else ()
+    ms = (2, 1) if mermer else ()
+    if zs or ms:
+        mat = dene(zs[0] if zs else 0, ms[0] if ms else 0)
+        if mat:
+            return mat, (zs[0] if zs else 0), (ms[0] if ms else 0)
+        z_iyi = next((z for z in zs if (ms or z != zs[0]) and dene(z, 0)), 0)     # her katman tek basina
+        m_iyi = next((m for m in ms if (zs or m != ms[0]) and dene(0, m)), 0)
+        if z_iyi and m_iyi:
+            mat = dene(z_iyi, m_iyi)
+            if mat:
+                return mat, z_iyi, m_iyi
+        if z_iyi or m_iyi:
+            z, m = (z_iyi, 0) if z_iyi else (0, m_iyi)
+            mat = dene(z, m)
+            if mat:
+                return mat, z, m
     mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, None)
-    if zemin and not derlendi_mi(mat):
-        unreal.log_error("[Arena] Zeminsiz malzeme de 0 komut gosterdi - olcum guvenilmez olabilir. Bu satiri gonder.")
-    return mat, 0
+    if (zemin or mermer) and not derlendi_mi(mat):
+        unreal.log_error("[Arena] Katmansiz malzeme de 0 komut gosterdi - olcum guvenilmez olabilir. Bu satiri gonder.")
+    return mat, 0, 0
 
 
 def calistir():
@@ -446,10 +587,12 @@ def calistir():
 
     maske = maske_dokusu()
     zemin = zemin_dokulari() if maske else None
-    log("   su tribunu zemini: %s" % ("var" if zemin else "yok"))
+    mermer = mermer_dokulari()
+    log("   su tribunu zemini: %s, hava mermeri: %s" % ("var" if zemin else "yok", "var" if mermer else "yok"))
     log("2/3 Malzeme: M_ArenaBolge")
-    mat, seviye = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
+    mat, seviye, mseviye = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, mermer)
     log("   su tribunu zemini: %s" % ZEMIN_SEVIYE[seviye])
+    log("   hava mermer kaplamasi: %s" % (MERMER_SEVIYE[mseviye] if mermer else "dokular yok"))
     mi_yol = HEDEF + "/MI_ArenaBolge"
     mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
         tools.create_asset("MI_ArenaBolge", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -463,7 +606,7 @@ def calistir():
     log("3/3 Arenaya ataniyor...")
     malzeme_ata(aktor, sm, mi)
     les.save_current_level()
-    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu, ZeminGucu, ZeminParlaklik, BirikintiEsik, ZeminSuParilti)")
+    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu, ZeminGucu, ZeminParlaklik, BirikintiEsik, ZeminSuParilti, MermerGucu, MermerParlaklik, MermerTon, MermerOlcek, MermerAO, MermerAOOrta, MermerPuruz, MermerNormal)")
 
 
 calistir()
