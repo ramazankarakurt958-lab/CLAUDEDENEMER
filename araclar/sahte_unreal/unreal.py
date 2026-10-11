@@ -72,16 +72,20 @@ class EditorAssetLibrary(_Taban):
     def does_directory_exist(y): return True
     @staticmethod
     def list_assets(k, recursive=True, include_folder=False):
+        if "Isaret" in k: return [k + "/SM_EksenIsaret"]
         return [k + "/" + n for n in ("a_diff_2k", "a_nor_gl_2k", "a_rough_2k", "mesh1")]
     @staticmethod
     def load_asset(y):
         ad = y.split("/")[-1]
-        if "mesh" in ad or "SM_" in ad or ad.startswith("Ada") or "Gotik" in y: o = __getattr__("StaticMesh")()
+        if "mesh" in ad or "SM_" in ad or ad.startswith("Ada") or "Gotik" in y or "scfdy" in y: o = __getattr__("StaticMesh")()
         elif "texture" in ad or "diff" in ad or "nor" in ad or "rough" in ad or "color" in ad or "Noise" in ad or "Detay" in ad:
             o = __getattr__("Texture2D")()
         else: o = __getattr__("Object")()
         o.get_name = lambda: ad
         o.get_editor_property = lambda k: {"srgb": "diff" in ad or "texture_0" in ad}.get(k, MagicMock())
+        if type(o).__name__ == "StaticMesh":
+            o.get_bounding_box = lambda: _kutu(y)
+            o.get_static_mesh_description = lambda lod: _MerdivenKose(y)
         return o
     @staticmethod
     def save_loaded_asset(a): return True
@@ -156,6 +160,23 @@ def _boy(bag_, hatalar, yol):
         hatalar.append("dongu: " + e.sinif); return 1
     return _cikis_boyu(e, cikis, hatalar, yol | {id(e)})
 
+def _kutu(yol):
+    """sahte mesh kutulari: eksen isareti glTF (x,y,z) -> UE (x, -z, y) * 100 gibi; Fab merdiveni 332x455x166"""
+    b = MagicMock()
+    if "EksenIsaret" in yol: b.min, b.max = Vector(0, -3000, 0), Vector(1000, 0, 2000)
+    elif "scfdy" in yol or "Fab" in yol: b.min, b.max = Vector(-166, -227.5, 0), Vector(166, 227.5, 166)
+    else: b.min, b.max = Vector(-100, -100, 0), Vector(100, 100, 200)
+    return b
+
+class VertexID:
+    def __init__(self, i=0): self.i = i
+
+class _MerdivenKose:
+    """-x yonunde yukselen 8 basamakli sahte merdiven yuzeyi"""
+    def __init__(self, yol): self.p = [(x, y, 166.0 * (int((166 - x) / 332 * 8) + 1) / 8) for x in range(-160, 166, 10) for y in range(-220, 228, 40)]
+    def get_vertex_count(self): return len(self.p)
+    def get_vertex_position(self, v): return Vector(*self.p[v.i])
+
 class MaterialEditingLibrary(_Taban):
     @staticmethod
     def create_material_expression(m, sinif, x, y):
@@ -210,6 +231,7 @@ class _EAS(_Taban):
         arena.get_actor_label = lambda: "Arena"
         arena.get_actor_location = lambda: Vector(0, 0, 0)
         arena.get_actor_scale3d = lambda: Vector(1, 1, 1)
+        arena.get_actor_rotation = lambda: Rotator()
         sm = MagicMock(); sm.get_name.return_value = "arena_game"
         arena.static_mesh_component.get_editor_property.return_value = sm
         arena.static_mesh_component.get_num_materials.return_value = 1

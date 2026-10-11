@@ -49,7 +49,14 @@ Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (ku
 Derlenmezse script kendiliginden sadelestirir: tam (dalgali birikinti) -> birikintili (dalgasiz) -> sadece levha ->
 zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yazar.
 
-## 3D basamaklar (Basamaklar.py)
-Ates ve su tribunlerinin egik oturma yuzeylerine gercek 3D basamak sıralari (75 cm derinlik, duzgun halka dilimleri).
-Renk bolgenin kendi rengi x net tas dokusu. Uretim: `araclar/bolge_doku/basamak.py` (bolge tespiti) + `basamak3d.py`.
-Ayar: `/Game/Maps/Arena/Basamak/MI_Basamak` (Parlaklik, DokuTekrar, Puruzluluk). Kaldirmak: dosyada `KALDIR = True`.
+## Fab merdivenleri (FabMerdiven.py)
+Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme
+bloklari arasinda) dizilir: her dilimde iki sira, on sira 28 m yurume yolundan, arka sira onun ustunden duvara.
+Moduller duvar egrisine diktir; olcekleri dilimin derinligine ve yuksekligine gore ayarlanir. Eski BK_Basamak silinir.
+Yerlesim: `araclar/bolge_doku/merdiven_yerlesim.py` -> Kaynak/merdiven_yerlesim.json (iki dizilis).
+Eksenler: Kaynak/SM_EksenIsaret.glb ice aktarilip kutusundan glTF -> UE eksen eslemesi okunur.
+Ayarlar (dosya basi): DIZILIS ("dogal" = kendi egimine yakin, ustte set duvari; "dik" = terasa kadar),
+YUKSELIS (yon ters cikarsa "+x"/"-x"/"+y"/"-y"), RENK (malzemede Tint varsa bolge tonu), KALDIR.
+
+## 3D basamaklar (Basamaklar.py) - yerini FabMerdiven.py aldi
+Ates ve su tribunlerinin egik oturma yuzeylerine uretilmis 3D basamak sıralari. FabMerdiven.py calisinca silinir.
