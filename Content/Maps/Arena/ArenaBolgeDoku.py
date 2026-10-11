@@ -121,7 +121,7 @@ def zemin_dokulari():
     return sonuc
 
 
-def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
+def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3):
     """M_ArenaTas ile ayni yapi, renk dokusu degistirilebilir parametre (Renk)."""
     yol = HEDEF + "/M_ArenaBolge"
     if eal.does_asset_exist(yol):
@@ -268,71 +268,96 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
         puruz, puruz_c = pl, ""
     puruz_son = (puruz, puruz_c)
 
-    def su_zemini(zemin, t_m, renk_in, puruz_in, normal_in, emis_in):
-        """Yukari bakan su tribunu yuzeyleri: net tas levha + yuksekte parlayan dalgali su birikintisi."""
+    def su_zemini(zemin, t_m, renk_in, puruz_in, normal_in, emis_in, seviye):
+        """Yukari bakan su tribunu yuzeyleri: net tas levha + yuksekte parlayan dalgali su birikintisi.
+        seviye 1: sadece levha  2: + su birikintisi  3: + birikintide kayan dalga ve isilti.
+        Butun carpimlar skaler ya da renk x skaler; dunya eksenleri DotProduct ile (lav dalgasinda derlendigi gibi),
+        UV'ler iki skalerden AppendVector ile kurulur (UE 5.8'de maske/2'li sabit carpimi float2 x float3 hatasi verdi)."""
         zD, zN, zR, zB, zW = zemin
         X = 1800
-        wp = ifade(unreal.MaterialExpressionWorldPosition, X - 1000, 1200)
-        wxy = bilesen(wp, ("r", "g"), X - 850, 1200)
-        wz = bilesen(wp, ("b",), X - 850, 1350)
-        zuv = carp(wxy, sabit(1.0 / 400.0, X - 850, 1280), X - 700, 1200)          # levha dokusu 4 m'de bir tekrar
+
+        def eksen(kaynak, v, x, y):
+            e = ifade(unreal.MaterialExpressionDotProduct, x, y)
+            bag(kaynak, "", e, "A")
+            bag(vek3(v[0], v[1], v[2], x - 150, y + 60), "", e, "B")
+            return e
+
+        def ekle(a, b, x, y):
+            e = ifade(unreal.MaterialExpressionAppendVector, x, y)
+            bag(a, "", e, "A")
+            bag(b, "", e, "B")
+            return e
+
+        wp = ifade(unreal.MaterialExpressionWorldPosition, X - 1300, 1250)
+        wx = eksen(wp, (1.0, 0.0, 0.0), X - 1100, 1150)
+        wy = eksen(wp, (0.0, 1.0, 0.0), X - 1100, 1250)
+        wz = eksen(wp, (0.0, 0.0, 1.0), X - 1100, 1350)
+        zaman = ifade(unreal.MaterialExpressionTime, X - 1100, 2100) if seviye >= 3 else None
+
+        def dunya_uv(bolen, x, y, hx=0.0, hy=0.0):
+            """dunyaya hizali UV (bolen cm'de bir tekrar), istenirse zamanla kayar"""
+            u = carp(wx, sabit(1.0 / bolen, x - 150, y + 40), x, y)
+            v = carp(wy, sabit(1.0 / bolen, x - 150, y + 120), x, y + 80)
+            if zaman:
+                u = topla(u, carp(zaman, sabit(hx, x, y + 160), x + 100, y + 160), x + 150, y)
+                v = topla(v, carp(zaman, sabit(hy, x, y + 240), x + 100, y + 240), x + 150, y + 80)
+            return ekle(u, v, x + 300, y)
+
+        zuv = dunya_uv(400.0, X - 850, 1150)                                         # levha 4 m'de bir tekrar
         t_zd = doku(zD, ST.SAMPLERTYPE_COLOR, X - 500, 1000)
         t_zn = doku(zN, ST.SAMPLERTYPE_NORMAL, X - 500, 1200)
         t_zr = doku(zR, ST.SAMPLERTYPE_LINEAR_COLOR, X - 500, 1400)
         for t in (t_zd, t_zn, t_zr):
             bag(zuv, "", t, "UVs")
-        t_zb = doku(zB, ST.SAMPLERTYPE_LINEAR_COLOR, X - 500, 1600)
-        for t in (t_zd, t_zn, t_zr, t_zb):
             ortak_ornekleyici(t)
-        bag(carp(wxy, sabit(1.0 / 3000.0, X - 850, 1600), X - 700, 1600), "", t_zb, "UVs")
         # zemin agirligi: bolge (maske.A) * yukari bakma * ZeminGucu
-        nz = bilesen(ifade(unreal.MaterialExpressionVertexNormalWS, X - 1000, 1800), ("b",), X - 850, 1800)
+        nz = eksen(ifade(unreal.MaterialExpressionVertexNormalWS, X - 1300, 1800), (0.0, 0.0, 1.0), X - 1100, 1800)
         yukari = doygun(carp(topla(nz, sabit(-0.7, X - 850, 1880), X - 700, 1800), sabit(6.0, X - 700, 1880), X - 550, 1800), X - 400, 1800)
         fw = carp(carp(yukari, t_m, X - 250, 1800, "", "A"), skaler("ZeminGucu", 1.0, X - 250, 1900), X - 100, 1800)
+        # renk, puruzluluk, normal: levha
+        zrenk = carp(t_zd, skaler("ZeminParlaklik", 1.0, X - 300, 950), X - 150, 1000, "RGB")
+        r = karis(renk_in, zrenk, carp(fw, sabit(0.92, X, 1100), X + 150, 1100), X + 300, 1000)
+        pr = karis(puruz_in[0], t_zr, fw, X + 300, 1300, puruz_in[1], "R")
+        n_in = normal_in if normal_in else vek3(0.0, 0.0, 1.0, X + 300, 1150)
+        n = karis(n_in, dunyadan_tegete(t_zn, X + 150, 1200, "RGB"), fw, X + 450, 1150)
+        e = emis_in
+        if seviye < 2:
+            return r, (pr, ""), n, e
+
         # birikinti: gurultu + yukseklik (teraslar ve kule tepeleri daha cok su tutar)
+        t_zb = doku(zB, ST.SAMPLERTYPE_LINEAR_COLOR, X - 500, 1600)
+        ortak_ornekleyici(t_zb)
+        bag(dunya_uv(3000.0, X - 850, 1550), "", t_zb, "UVs")
         hb = doygun(carp(topla(wz, sabit(-3400.0, X - 700, 1430), X - 550, 1350), sabit(1.0 / 300.0, X - 550, 1430), X - 400, 1350), X - 250, 1350)
         bn = topla(topla(t_zb, carp(hb, sabit(0.7, X - 250, 1450), X - 100, 1400), X + 50, 1500, "R"),
                    carp(skaler("BirikintiEsik", 0.68, X - 100, 1650), sabit(-1.0, X - 100, 1720), X + 50, 1650), X + 200, 1550)
         pud = carp(doygun(carp(bn, sabit(3.0, X + 200, 1650), X + 350, 1550), X + 500, 1550), fw, X + 650, 1600)
-        # renk
-        zrenk = carp(t_zd, skaler("ZeminParlaklik", 1.0, X - 300, 950), X - 150, 1000, "RGB")
-        r = karis(renk_in, zrenk, carp(fw, sabit(0.92, X, 1100), X + 150, 1100), X + 300, 1000)
         r = karis(r, vek3(0.01, 0.04, 0.07, X + 300, 900), pud, X + 450, 1000)
-        # puruzluluk
-        pr = karis(puruz_in[0], t_zr, fw, X + 300, 1300, puruz_in[1], "R")
         pr = karis(pr, sabit(0.03, X + 300, 1400), pud, X + 450, 1300)
-        # normal: levha normali dunyadan tegete; birikintide iki yone kayan dalga
-        n_in = normal_in if normal_in else vek3(0.0, 0.0, 1.0, X + 300, 1150)
-        n1 = karis(n_in, dunyadan_tegete(t_zn, X + 150, 1200, "RGB"), fw, X + 450, 1150)
-        zaman = ifade(unreal.MaterialExpressionTime, X - 1000, 2100)
-
-        def kayan(bolen, hx, hy, y):
-            hiz = ifade(unreal.MaterialExpressionConstant2Vector, X - 850, y + 80)
-            hiz.set_editor_property("r", hx)
-            hiz.set_editor_property("g", hy)
-            uvs = topla(carp(wxy, sabit(1.0 / bolen, X - 850, y), X - 700, y), carp(zaman, hiz, X - 700, y + 80), X - 550, y)
-            t = doku(zW, ST.SAMPLERTYPE_NORMAL, X - 400, y)
-            ortak_ornekleyici(t)
-            bag(uvs, "", t, "UVs")
-            return t
-        r1 = kayan(300.0, 0.03, 0.02, 2100)
-        r2 = kayan(210.0, -0.02, 0.035, 2300)
-        rg = carp(topla(bilesen(r1, ("r", "g"), X - 250, 2100), bilesen(r2, ("r", "g"), X - 250, 2300), X - 100, 2200),
-                  sabit(0.15, X - 100, 2300), X + 50, 2200)
-        dn = ifade(unreal.MaterialExpressionAppendVector, X + 200, 2200)
-        bag(rg, "", dn, "A")
-        bag(sabit(1.0, X + 50, 2300), "", dn, "B")
-        dnn = ifade(unreal.MaterialExpressionNormalize, X + 350, 2200)
-        bag(dn, "", dnn, "")
-        n2 = karis(n1, dunyadan_tegete(dnn, X + 500, 2200), pud, X + 650, 1150)
-        # birikintide hafif camgobegi isilti (kipirtinin parlak yerlerinde artar)
-        kip = doygun(carp(topla(bilesen(r1, ("r",), X - 250, 2400), sabit(-0.1, X - 250, 2480), X - 100, 2400),
-                          sabit(4.0, X - 100, 2480), X + 50, 2400), X + 200, 2400)
-        isik = carp(carp(vek3(0.05, 0.35, 0.7, X + 200, 2500), carp(topla(sabit(0.18, X + 200, 2600), carp(kip, sabit(0.25, X + 350, 2450), X + 500, 2400),
-                                                                          X + 650, 2450), pud, X + 800, 2450), X + 950, 2450),
+        parilti = sabit(0.18, X + 200, 2600)              # birikintide hafif camgobegi isilti
+        if seviye < 3:
+            dn = vek3(0.0, 0.0, 1.0, X + 500, 2200)       # dalgasiz duz su yuzeyi (tegette yukari)
+        else:
+            def kayan(bolen, hx, hy, y):
+                t = doku(zW, ST.SAMPLERTYPE_NORMAL, X - 400, y)
+                ortak_ornekleyici(t)
+                bag(dunya_uv(bolen, X - 850, y, hx, hy), "", t, "UVs")
+                return t
+            r1 = kayan(300.0, 0.03, 0.02, 2100)
+            r2 = kayan(210.0, -0.02, 0.035, 2400)
+            # iki dalga normalinin x ve y'si ayri ayri toplanir (skaler), z = 1
+            nx = carp(topla(r1, r2, X - 250, 2150, "R", "R"), sabit(0.15, X - 250, 2230), X - 100, 2150)
+            ny = carp(topla(r1, r2, X - 250, 2300, "G", "G"), sabit(0.15, X - 250, 2380), X - 100, 2300)
+            dn = ifade(unreal.MaterialExpressionNormalize, X + 350, 2200)
+            bag(ekle(ekle(nx, ny, X + 50, 2200), sabit(1.0, X + 50, 2300), X + 200, 2200), "", dn, "")
+            dn = dunyadan_tegete(dn, X + 500, 2200)
+            kip = doygun(carp(topla(r1, sabit(-0.1, X - 250, 2530), X - 100, 2500, "R"), sabit(4.0, X - 100, 2580), X + 50, 2500), X + 200, 2500)
+            parilti = topla(parilti, carp(kip, sabit(0.25, X + 350, 2450), X + 500, 2400), X + 650, 2450)
+        n = karis(n, dn, pud, X + 650, 1150)
+        isik = carp(carp(vek3(0.05, 0.35, 0.7, X + 200, 2500), carp(parilti, pud, X + 800, 2450), X + 950, 2450),
                     skaler("ZeminSuParilti", 1.0, X + 800, 2550), X + 1100, 2450)
-        e = topla(emis_in, isik, X + 1250, 2300) if emis_in else isik
-        return r, (pr, ""), n2, e
+        e = topla(e, isik, X + 1250, 2300) if e else isik
+        return r, (pr, ""), n, e
 
     if normal or detay_n:
         parcalar = []
@@ -354,7 +379,7 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None):
         normal_son = nrm
 
     if t_m and zemin:
-        zemin_katmani = su_zemini(zemin, t_m, taban_renk, puruz_son, normal_son, emis_son)
+        zemin_katmani = su_zemini(zemin, t_m, taban_renk, puruz_son, normal_son, emis_son, seviye)
         taban_renk, puruz_son, normal_son, emis_son = zemin_katmani
 
     mel.connect_material_property(taban_renk, "", unreal.MaterialProperty.MP_BASE_COLOR)
@@ -382,17 +407,25 @@ def derlendi_mi(mat):
         return True
 
 
+ZEMIN_SEVIYE = {3: "tam (dalgali su birikintisi)", 2: "birikintili (dalgasiz)", 1: "sadece tas levha", 0: "EKLENEMEDI (arena zeminsiz kuruldu)"}
+
+
 def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin):
-    """Zemin katmaniyla kurmayi dener; Python ya da derleme hatasinda zeminsiz kurar (arena asla dokusuz kalmaz)."""
+    """Zemin katmanini tam kurmayi dener; derlenmezse bir sade seviyeyle tekrar dener, en son zeminsiz kurar
+    (arena asla dokusuz kalmaz). Doner: (malzeme, seviye)."""
     if zemin:
-        try:
-            mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
-            if derlendi_mi(mat):
-                return mat, True
-            unreal.log_error("[Arena] Zemin katmani derlenemedi - zeminsiz kuruluyor. Output Log'daki LogMaterial hatalarini gonder.")
-        except Exception as e:
-            unreal.log_error("[Arena] Zemin katmani kurulamadi (%s) - zeminsiz kuruluyor. Bu satiri gonder." % e)
-    return malzeme(renk, normal, orm, detay_d, detay_n, maske, None), False
+        for seviye in (3, 2, 1):
+            try:
+                mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, seviye)
+                if derlendi_mi(mat):
+                    return mat, seviye
+                unreal.log_error("[Arena] Zemin seviye %d derlenemedi - daha sade deneniyor. LogMaterial satirlarini gonder." % seviye)
+            except Exception as e:
+                unreal.log_error("[Arena] Zemin seviye %d kurulamadi (%s) - daha sade deneniyor. Bu satiri gonder." % (seviye, e))
+    mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, None)
+    if zemin and not derlendi_mi(mat):
+        unreal.log_error("[Arena] Zeminsiz malzeme de 0 komut gosterdi - olcum guvenilmez olabilir. Bu satiri gonder.")
+    return mat, 0
 
 
 def calistir():
@@ -415,8 +448,8 @@ def calistir():
     zemin = zemin_dokulari() if maske else None
     log("   su tribunu zemini: %s" % ("var" if zemin else "yok"))
     log("2/3 Malzeme: M_ArenaBolge")
-    mat, zemin_var = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
-    log("   su tribunu zemini: %s" % ("eklendi" if zemin_var else "EKLENEMEDI (arena zeminsiz kuruldu)"))
+    mat, seviye = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin)
+    log("   su tribunu zemini: %s" % ZEMIN_SEVIYE[seviye])
     mi_yol = HEDEF + "/MI_ArenaBolge"
     mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
         tools.create_asset("MI_ArenaBolge", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())

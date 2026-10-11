@@ -86,12 +86,114 @@ class EditorAssetLibrary(_Taban):
     @staticmethod
     def save_loaded_asset(a): return True
 
+# --- malzeme grafigi: dugumler, baglantilar ve UE kurallariyla bilesen sayisi (float1..4) denetimi ---
+_GRAF = {}      # id(malzeme) -> {"ifadeler": [...], "cikis": {ozellik: (ifade, cikis_adi)}}
+_DERLEME = {}   # id(malzeme) -> hata listesi (son recompile)
+
+class _Ifade:
+    def __init__(self, sinif):
+        self.sinif, self.oz, self.giris = sinif, {}, {}
+    def set_editor_property(self, k, v): self.oz[k] = v
+    def get_editor_property(self, k): return self.oz.get(k, MagicMock())
+    def __getattr__(self, ad):
+        if ad.startswith("__"): raise AttributeError(ad)
+        return MagicMock(name=self.sinif + "." + ad)
+
+_TEK_GIRIS = {"Saturate", "Normalize", "Sine", "Cosine", "Frac", "Abs", "OneMinus", "ComponentMask", "Transform", "Floor"}
+_SABIT = {"Constant": 1, "ScalarParameter": 1, "Time": 1, "Constant2Vector": 2, "Constant3Vector": 3,
+          "Constant4Vector": 4, "VectorParameter": 4, "WorldPosition": 3, "VertexNormalWS": 3, "VertexColor": 3,
+          "TextureCoordinate": 2, "CameraPositionWS": 3, "PixelNormalWS": 3, "ObjectPositionWS": 3}
+
+def _cikis_boyu(e, cikis, hatalar, yol):
+    t = e.sinif
+    if t.startswith("TextureSample"):
+        uv = e.giris.get("UVs")
+        if uv is not None:
+            n = _boy(uv, hatalar, yol)
+            if n not in (1, 2): hatalar.append("(Node %s) UVs float%d olamaz" % (t, n))
+        return {"": 3, "RGB": 3, "R": 1, "G": 1, "B": 1, "A": 1, "RGBA": 4}[cikis]
+    if t == "Constant2Vector" and cikis in ("R", "G"): return 1
+    if t in ("Constant3Vector", "VectorParameter", "VertexColor") and cikis in ("R", "G", "B", "A"): return 1
+    if t == "VectorParameter" and cikis in ("", "RGB"): return 3
+    if t in _SABIT:
+        if cikis not in ("", "XYZ", "RGB"): hatalar.append("(Node %s) bilinmeyen cikis %r" % (t, cikis))
+        return _SABIT[t]
+    g = {k: _boy(v, hatalar, yol) for k, v in e.giris.items()}
+    if t in ("Multiply", "Add", "Subtract", "Divide", "Max", "Min"):
+        a, b = g.get("A", 1), g.get("B", 1)
+        if a != b and 1 not in (a, b):
+            hatalar.append("(Node %s) Arithmetic between types float%d and float%d are undefined" % (t, a, b))
+        return max(a, b)
+    if t == "LinearInterpolate":
+        a, b, al = g.get("A", 1), g.get("B", 1), g.get("Alpha", 1)
+        n = max(a, b)
+        if (a != b and 1 not in (a, b)) or (al != 1 and al != n):
+            hatalar.append("(Node Lerp) uyumsuz float%d/float%d/alfa float%d" % (a, b, al))
+        return n
+    if t == "DotProduct":
+        a, b = g.get("A", 1), g.get("B", 1)
+        if a != b: hatalar.append("(Node Dot) float%d . float%d" % (a, b))
+        return 1
+    if t == "AppendVector":
+        n = g.get("A", 1) + g.get("B", 1)
+        if n > 4: hatalar.append("(Node Append) float%d" % n)
+        return n
+    if t in _TEK_GIRIS:
+        n = g.get("", 1)
+        if t == "ComponentMask":
+            k = [c for c in "rgba" if e.oz.get(c)]
+            if not k: hatalar.append("(Node Mask) kanal secilmedi")
+            if any("rgba".index(c) >= n for c in k): hatalar.append("(Node Mask) float%d icinde %s yok" % (n, k))
+            return len(k) or 1
+        if t == "Transform": return 3
+        return n
+    hatalar.append("(Node %s) denetleyici bu dugumu tanimiyor" % t)
+    return 1
+
+def _boy(bag_, hatalar, yol):
+    e, cikis = bag_
+    if id(e) in yol:
+        hatalar.append("dongu: " + e.sinif); return 1
+    return _cikis_boyu(e, cikis, hatalar, yol | {id(e)})
+
 class MaterialEditingLibrary(_Taban):
     @staticmethod
     def create_material_expression(m, sinif, x, y):
         SAYAC["ifade"] += 1
         if not isinstance(sinif, type): raise TypeError("ifade sinifi degil: %r" % sinif)
-        return sinif()
+        e = _Ifade(sinif.__name__.replace("MaterialExpression", ""))
+        _GRAF.setdefault(id(m), {"ifadeler": [], "cikis": {}})["ifadeler"].append(e)
+        return e
+    @staticmethod
+    def delete_all_material_expressions(m):
+        _GRAF[id(m)] = {"ifadeler": [], "cikis": {}}
+    @staticmethod
+    def connect_material_expressions(a, cikis, b, giris):
+        if not isinstance(a, _Ifade) or not isinstance(b, _Ifade): raise TypeError("ifade degil: %r -> %r" % (a, b))
+        b.giris[giris] = (a, cikis)
+        return True
+    @staticmethod
+    def connect_material_property(a, cikis, ozellik):
+        if not isinstance(a, _Ifade): raise TypeError("ifade degil: %r" % (a,))
+        for g in _GRAF.values():
+            if any(e is a for e in g["ifadeler"]): g["cikis"][str(ozellik)] = (a, cikis)
+        return True
+    @staticmethod
+    def recompile_material(m):
+        g = _GRAF.get(id(m), {"cikis": {}})
+        hatalar = []
+        for oz, bg in g["cikis"].items():
+            n = _boy(bg, hatalar, frozenset())
+            beklenen = 1 if ("ROUGHNESS" in oz or "OPACITY" in oz or "METALLIC" in oz) else 3
+            if n not in (1, beklenen): hatalar.append("%s float%d alamaz" % (oz, n))
+        _DERLEME[id(m)] = hatalar
+        for h in hatalar: print("DERLEME HATASI", h)
+    @staticmethod
+    def get_statistics(m):
+        hata_var = bool(_DERLEME.get(id(m)))
+        ist = MagicMock()
+        ist.get_editor_property = lambda k: 0 if hata_var else 123
+        return ist
 
 class _Aktor(_Taban):
     def __init__(self, etiket, konum):

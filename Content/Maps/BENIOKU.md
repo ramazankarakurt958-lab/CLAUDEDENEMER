@@ -46,6 +46,8 @@ Tribunlere ve kulelerin arka yuzlerine su eklenmez.
 Su tribununun yukari bakan yuzeylerine dunyaya hizali net tas levha (Kaynak/T_SuZemin_D/N/R, 4 m'de bir tekrar),
 yuksek teraslarda ve kule tepelerinde yansitan, dalgalanan, hafif parlayan su birikintileri. Kopruler ve orta platform haric.
 Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (kucuk = daha cok su), ZeminSuParilti.
+Derlenmezse script kendiliginden sadelestirir: tam (dalgali birikinti) -> birikintili (dalgasiz) -> sadece levha ->
+zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yazar.
 
 ## 3D basamaklar (Basamaklar.py)
 Ates ve su tribunlerinin egik oturma yuzeylerine gercek 3D basamak sıralari (75 cm derinlik, duzgun halka dilimleri).
