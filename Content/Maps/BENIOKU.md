@@ -49,14 +49,18 @@ Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (ku
 Derlenmezse script kendiliginden sadelestirir: tam (dalgali birikinti) -> birikintili (dalgasiz) -> sadece levha ->
 zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yazar.
 
-## Tribun kaplamalari: hava mermeri, orman yosunlu tasi (ArenaBolgeDoku.py icinde)
-Bolgeler: Kaynak/T_ArenaKaplamaMaske.png (R = hava, G = orman; `araclar/bolge_doku/kaplama_maske.py`). Dunyaya
+## Tribun kaplamalari: hava mermeri, orman yosunlu tasi, ates komurlesmis tasi (ArenaBolgeDoku.py icinde)
+Bolgeler: Kaynak/T_ArenaKaplamaMaske.png (R = hava, G = orman, B = ates, A = lav akintilarina yakinlik;
+`araclar/bolge_doku/kaplama_maske.py`). Dunyaya
 hizali ucyonlu kesme tas: duvarlar dahil derzli kusursuz kaplama, eski dokunun golgeleri hafifce korunur.
 - Hava: cilali krem mermer bloklar (T_Mermer_D/N, `mermer_doku.py`). Onizleme: Kaynak/M_Mermer_onizleme.jpg
 - Orman: asinmis gri tas (T_OrmanTas_D/N) + yukari bakan yuzlerde yogun, duvarlarda lekeli yosun (T_Yosun_D,
   alfa = buyume gurultusu; `orman_doku.py`). Onizleme: Kaynak/M_Orman_onizleme.jpg (sol ust referans)
-Ayar: MI_ArenaBolge -> Mermer*/Orman*: Gucu (0 = kapali), Parlaklik, Ton, Olcek (cm, blok buyuklugu), AO, AOOrta,
-Puruz, Normal; YosunMiktar (cok/az yosun), YosunUst (ust yuzlerde fazlalik), YosunParlaklik.
+- Ates: komurlesmis koyu tas (T_AtesTas_D/N) + catlak ve derzlerde parlayan lav (T_AtesCatlak); lav akintilarina
+  yakin yerde parlak, uzakta sonuk kor (`ates_doku.py`). Onizleme: Kaynak/M_Ates_onizleme.jpg
+Ayar: MI_ArenaBolge -> Mermer*/Orman*/Ates*: Gucu (0 = kapali), Parlaklik, Ton, Olcek (cm, blok buyuklugu), AO, AOOrta,
+Puruz, Normal; YosunMiktar (cok/az yosun), YosunUst (ust yuzlerde fazlalik), YosunParlaklik;
+AtesLavGucu (catlak isigi), AtesKor (lavdan uzak catlaklarin sonuk isigi).
 Derlenmezse her katman tek basina denenir: su zemini ve kaplamalar birbirini etkilemeden sadelesir.
 
 ## Fab merdivenleri (FabMerdiven.py)
