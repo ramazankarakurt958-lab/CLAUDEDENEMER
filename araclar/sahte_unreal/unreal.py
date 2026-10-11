@@ -108,7 +108,7 @@ class _Ifade:
 _TEK_GIRIS = {"Saturate", "Normalize", "Sine", "Cosine", "Frac", "Abs", "OneMinus", "ComponentMask", "Transform", "Floor"}
 _SABIT = {"Constant": 1, "ScalarParameter": 1, "Time": 1, "Constant2Vector": 2, "Constant3Vector": 3,
           "Constant4Vector": 4, "VectorParameter": 4, "WorldPosition": 3, "VertexNormalWS": 3, "VertexColor": 3,
-          "TextureCoordinate": 2, "CameraPositionWS": 3, "PixelNormalWS": 3, "ObjectPositionWS": 3}
+          "TextureCoordinate": 2, "CameraPositionWS": 3, "PixelNormalWS": 3, "ObjectPositionWS": 3, "Panner": 2}
 
 def _cikis_boyu(e, cikis, hatalar, yol):
     t = e.sinif

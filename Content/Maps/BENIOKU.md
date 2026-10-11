@@ -72,6 +72,16 @@ duz zeminde), altin carpismasiz. Uretim: `araclar/bolge_doku/merkez_desen.py` (o
 Ayar: /Game/Maps/Arena/Merkez/MI_MerkezZemin (Parlaklik, Puruzluluk, NormalGucu), MI_MerkezAltin (AltinRenk, Puruzluluk,
 Isik). Sonra ElementSahasi.py'yi tekrar calistir (saha cizgileri yeni zeminin ustune otursun). Kaldirmak: KALDIR = True.
 
+## Arena susleri (ArenaSusleme.py)
+- Kopru mesaleleri: mevcut uc koprunun iki kenarinda 18 mesale (tas kaide, bronz kase, kor, titreyen alev, turuncu isik).
+  Yeni kopru eklenmez.
+- Hava tribunu uzerinde donen yari saydam ruzgar seritleri (akan cizgiler).
+- Sancaklar: her bolgenin sahaya bakan duvarinda 3'er (ates kirmizi/alev, su mavi/dalga, orman yesil/yaprak, hava beyaz/girdap).
+- Arenanin altinda uc katmanli, aralikli, yavas akan bulut denizi.
+Uretim: `araclar/bolge_doku/mesale3d.py`, `susleme3d.py`. Onizleme: Kaynak/M_Susleme_onizleme.jpg.
+Ayar: /Game/Maps/Arena/Susleme/MI_* (MI_Alev: AlevGucu, Titreme; MI_Ruzgar: Opaklik, Parlaklik; MI_Bulut: Opaklik,
+Parlaklik). Dosya basinda PARCALAR ile tek tek kapatilir, ISIK ile mesale isiklari ayarlanir. Kaldirmak: KALDIR = True.
+
 ## Fab merdivenleri (FabMerdiven.py)
 Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme
 bloklari arasinda) dizilir: her dilimde iki sira, on sira 28 m yurume yolundan, arka sira onun ustunden duvara.
