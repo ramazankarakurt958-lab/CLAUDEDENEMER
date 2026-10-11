@@ -5,7 +5,7 @@
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaSusleme.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz. Kaldirmak icin KALDIR = True; tek tek kapatmak icin PARCALAR.
-# Ayar: ALEV_EFEKT, ALEV_OLCEK, ISIK, KOR_ISIK (dosya basi); /Game/Maps/Arena/Susleme/MI_* (Alev: AlevGucu; Ruzgar: Opaklik, Hiz; Bulut: Opaklik, Parlaklik, Hiz)
+# Ayar: ALEV_EFEKT, ALEV_OLCEK, ISIK, KOR_ISIK, ATES_EFEKT (dosya basi); /Game/Maps/Arena/Susleme/MI_* (Alev: AlevGucu; Ruzgar: Opaklik, Hiz; Bulut: Opaklik, Parlaklik, Hiz)
 import math
 import os
 import unreal
@@ -15,7 +15,7 @@ KAYNAK = os.path.join(ICERIK, "Maps", "Arena", "Kaynak")
 HEDEF = "/Game/Maps/Arena/Susleme"
 ETIKET = "SS_"
 KALDIR = False
-PARCALAR = {"mesale": True, "ruzgar": True, "sancak": True, "bulut": True}
+PARCALAR = {"mesale": True, "ruzgar": True, "sancak": True, "bulut": True, "ates_efekt": True}
 ISIK = {"renk": (1.0, 0.5, 0.2), "lumen": 120.0, "yaricap": 550.0}           # mesale isiklari (lumen, cm)
 # gercek ates: projedeki Niagara ates efektleri (ilk bulunan); hicbiri yoksa eski capraz alev kartlari kullanilir
 ALEV_EFEKT = ["/Game/Vefects/Free_Fire/Shared/Particles/NS_Fire_Small", "/Game/NiagaraExamples/FX_Misc/NS_Fire"]
@@ -27,6 +27,18 @@ MESALE = [[15.714, 24.27, -1.631], [15.714, 24.183, 1.069], [21.164, 24.17, -1.6
           [-27.086, 24.221, 1.139], [-27.086, 24.181, -1.701], [-31.886, 24.223, 1.139], [-31.886, 24.168, -1.701],
           [-2.106, 24.1, -16.881], [0.334, 24.052, -16.881], [-2.106, 24.035, -20.606], [0.334, 23.982, -20.606],
           [-2.106, 24.02, -24.331], [0.334, 24.078, -24.331]]
+
+# ates tribunu efektleri (arena glTF, metre): lav akintilarinin ustunde, ust taraflari acik noktalar (araclar/bolge_doku/
+# ates_efekt_konum.py). Her biri icin projede ilk bulunan Niagara efekti kullanilir; olcekler buradan ayarlanir.
+ATES_EFEKT = {
+    "LavAtes": dict(yollar=["/Game/Vefects/Free_Fire/Shared/Particles/NS_Fire_Floor_01", "/Game/Vefects/Free_Fire/Shared/Particles/NS_Fire_Medium",
+                            "/Game/NiagaraExamples/FX_Misc/NS_Fire"], olcek=0.5,
+                    konum=[[-32.81, 33.89, -12.73], [-19.80, 37.48, -31.27], [-33.18, 34.24, -20.09], [-28.36, 34.29, -25.56], [-10.70, 34.46, -42.66], [-24.33, 29.71, -19.16], [-24.28, 45.34, -32.63]]),
+    "Kivilcim": dict(yollar=["/Game/NiagaraExamples/FX_Sparks/NS_Spark_Continuous"], olcek=0.6,
+                     konum=[[-23.40, 33.93, -31.08], [-34.59, 34.17, -8.91], [-24.22, 45.39, -36.80]]),
+    "Duman": dict(yollar=["/Game/NiagaraExamples/FX_Smoke/NS_Smoke_Plume", "/Game/NiagaraExamples/FX_Smoke/NS_Chimney_Smoke"], olcek=0.6,
+                  konum=[[-30.91, 51.01, -32.45], [-23.76, 46.01, -37.60], [-11.84, 44.16, -46.66], [-39.27, 43.57, -20.83]]),
+}
 
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
@@ -313,24 +325,30 @@ def isiklar(arena):
     log("   %d mesale isigi" % len(MESALE))
 
 
-def niagara_ates(arena):
-    """Her mesale kasesine gercek (parcacikli) ates koyar. Efekt bulunamazsa False."""
-    yol = next((y for y in ALEV_EFEKT if eal.does_asset_exist(y)), None)
+def niagara_koy(arena, yollar, konumlar, olcek, etiket, klasor):
+    """Verilen glTF konumlarina projede ilk bulunan Niagara efektini koyar. Doner: kullanilan efekt adi ya da None."""
+    yol = next((y for y in yollar if eal.does_asset_exist(y)), None)
     if not yol:
-        return False
+        return None
     harita, birim = eksen_haritasi()
     dunya = dunya_donusumu(arena, harita, birim)
     efekt = eal.load_asset(yol)
-    for i, p in enumerate(MESALE):
-        w = dunya([p[0], p[1] - 0.25, p[2]])                      # isik kasenin 25 cm ustunde; ates kor yataginda
-        a = eas.spawn_actor_from_object(efekt, unreal.Vector(*w), unreal.Rotator(0, 0, 0))
+    for i, p in enumerate(konumlar):
+        a = eas.spawn_actor_from_object(efekt, unreal.Vector(*dunya(p)), unreal.Rotator(0, 0, 0))
         if not a:
-            return False
-        a.set_actor_label("%sAtes_%02d" % (ETIKET, i))
-        a.set_folder_path("Arena/Susleme/Ates")
-        a.set_actor_scale3d(unreal.Vector(ALEV_OLCEK, ALEV_OLCEK, ALEV_OLCEK))
-    log("   %d mesaleye ates efekti: %s" % (len(MESALE), yol.split("/")[-1]))
-    return True
+            return None
+        a.set_actor_label("%s%s_%02d" % (ETIKET, etiket, i))
+        a.set_folder_path("Arena/Susleme/" + klasor)
+        a.set_actor_scale3d(unreal.Vector(olcek, olcek, olcek))
+    return yol.split("/")[-1]
+
+
+def niagara_ates(arena):
+    """Her mesale kasesine gercek (parcacikli) ates koyar (isik kasenin 25 cm ustunde; ates kor yataginda)."""
+    ad = niagara_koy(arena, ALEV_EFEKT, [[p[0], p[1] - 0.25, p[2]] for p in MESALE], ALEV_OLCEK, "Ates", "Ates")
+    if ad:
+        log("   %d mesaleye ates efekti: %s" % (len(MESALE), ad))
+    return bool(ad)
 
 
 def calistir():
@@ -374,6 +392,11 @@ def calistir():
         mi = bulut_malzemesi(doku("T_Bulut", srgb=False))
         for sm in meshler("SM_BulutDeniz.glb", "Bulut"):
             koy(sm, mi, "BulutDeniz", arena)
+    if PARCALAR["ates_efekt"]:
+        log("Ates tribunu efektleri...")
+        for ad, e in ATES_EFEKT.items():
+            kullanilan = niagara_koy(arena, e["yollar"], e["konum"], e["olcek"], ad, "AtesTribunu")
+            log("   %s: %s" % (ad, "%d adet, %s" % (len(e["konum"]), kullanilan) if kullanilan else "efekt bulunamadi, atlandi"))
     les.save_current_level()
     log("TAMAM - susler eklendi (Outliner: Arena/Susleme). Ayar: " + HEDEF + "/MI_* ; kapatmak icin PARCALAR.")
 
