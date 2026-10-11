@@ -72,7 +72,26 @@ def meshler(dosya, klasor):
     sonuc = [a for a in sonuc if isinstance(a, unreal.StaticMesh)]
     if not sonuc:
         hata(dosya + " aktarilamadi (" + hedef + ").")
+    for sm in sonuc:
+        carpisma_temizle(sm)
     return sonuc
+
+
+def carpisma_temizle(mesh):
+    """Ice aktarma her mesh'e otomatik kutu carpismasi verir. Mesale mesh'i uc kopruye yayildigi icin kutusu orta
+    platformu (PlayerStart, oyuncular) da yutuyordu: oyuncular zeminin altina itiliyordu. Basit carpisma silinir,
+    carpisma sadece gercek ucgenlerden (complex as simple) olur; carpismasiz aktorlerde zaten kapalidir."""
+    try:
+        unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem).remove_collisions(mesh)
+    except Exception as e:
+        log("   basit carpisma silinemedi (%s): %s" % (mesh.get_name(), e))
+    try:
+        body = mesh.get_editor_property("body_setup")
+        if body:
+            body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+    except Exception as e:
+        log("   carpisma ayarlanamadi (%s): %s" % (mesh.get_name(), e))
+    eal.save_loaded_asset(mesh)
 
 
 def doku(ad, srgb=True):
@@ -208,8 +227,8 @@ def sancak_malzemesi(t):
 
 def bulut_malzemesi(t):
     m = Malzeme("M_Bulut", unreal.BlendMode.BLEND_TRANSLUCENT, isiksiz=True, iki_yuz=True)
-    d1 = m.doku(t, m.kaydir(0.004, 0.002))
-    d2 = m.doku(t, m.kaydir(-0.003, 0.005))
+    d1 = m.doku(t, m.kaydir(0.004, 0.002), ST.SAMPLERTYPE_LINEAR_COLOR)       # T_Bulut sRGB kapali: Linear Color
+    d2 = m.doku(t, m.kaydir(-0.003, 0.005), ST.SAMPLERTYPE_LINEAR_COLOR)
     m.bagla(m.carp(m.sabit3(0.82, 0.85, 0.9), m.skaler("Parlaklik", 1.2)), MP.MP_EMISSIVE_COLOR)
     m.bagla(m.carp(m.carp(d1, d2, "R", "R"), m.skaler("Opaklik", 1.4)), MP.MP_OPACITY)
     return m.bitir()
