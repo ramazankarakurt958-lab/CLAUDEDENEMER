@@ -5,7 +5,7 @@
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaSusleme.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz. Kaldirmak icin KALDIR = True; tek tek kapatmak icin PARCALAR.
-# Ayar: /Game/Maps/Arena/Susleme/MI_* (Alev: AlevGucu; Ruzgar: Opaklik, Hiz; Bulut: Opaklik, Parlaklik, Hiz)
+# Ayar: ALEV_EFEKT, ALEV_OLCEK, ISIK, KOR_ISIK (dosya basi); /Game/Maps/Arena/Susleme/MI_* (Alev: AlevGucu; Ruzgar: Opaklik, Hiz; Bulut: Opaklik, Parlaklik, Hiz)
 import math
 import os
 import unreal
@@ -16,7 +16,11 @@ HEDEF = "/Game/Maps/Arena/Susleme"
 ETIKET = "SS_"
 KALDIR = False
 PARCALAR = {"mesale": True, "ruzgar": True, "sancak": True, "bulut": True}
-ISIK = {"renk": (1.0, 0.55, 0.22), "parlaklik": 2500.0, "yaricap": 900.0}     # mesale isiklari (lumen, cm)
+ISIK = {"renk": (1.0, 0.5, 0.2), "lumen": 120.0, "yaricap": 550.0}           # mesale isiklari (lumen, cm)
+# gercek ates: projedeki Niagara ates efektleri (ilk bulunan); hicbiri yoksa eski capraz alev kartlari kullanilir
+ALEV_EFEKT = ["/Game/Vefects/Free_Fire/Shared/Particles/NS_Fire_Small", "/Game/NiagaraExamples/FX_Misc/NS_Fire"]
+ALEV_OLCEK = 0.3          # efekt boyu (kase capi ~60 cm)
+KOR_ISIK = 1.2            # kor yataginin parlamasi (MI_MesaleKor -> Isik)
 # mesale isik konumlari (arena glTF, metre; mesale3d.py -> mesale_konum.json)
 MESALE = [[15.714, 24.27, -1.631], [15.714, 24.183, 1.069], [21.164, 24.17, -1.631], [21.164, 24.195, 1.069],
           [-17.486, 24.274, 1.139], [-17.486, 24.335, -1.701], [-22.286, 24.222, 1.139], [-22.286, 24.164, -1.701],
@@ -298,11 +302,35 @@ def isiklar(arena):
         a.set_actor_label("%sIsik_%02d" % (ETIKET, i))
         a.set_folder_path("Arena/Susleme/Isiklar")
         c = a.get_component_by_class(unreal.PointLightComponent)
-        c.set_intensity(ISIK["parlaklik"])
+        try:
+            c.set_editor_property("intensity_units", unreal.LightUnits.LUMENS)
+        except Exception:
+            pass
+        c.set_intensity(ISIK["lumen"])
         c.set_light_color(unreal.LinearColor(ISIK["renk"][0], ISIK["renk"][1], ISIK["renk"][2], 1.0))
         c.set_attenuation_radius(ISIK["yaricap"])
         c.set_cast_shadows(False)
     log("   %d mesale isigi" % len(MESALE))
+
+
+def niagara_ates(arena):
+    """Her mesale kasesine gercek (parcacikli) ates koyar. Efekt bulunamazsa False."""
+    yol = next((y for y in ALEV_EFEKT if eal.does_asset_exist(y)), None)
+    if not yol:
+        return False
+    harita, birim = eksen_haritasi()
+    dunya = dunya_donusumu(arena, harita, birim)
+    efekt = eal.load_asset(yol)
+    for i, p in enumerate(MESALE):
+        w = dunya([p[0], p[1] - 0.25, p[2]])                      # isik kasenin 25 cm ustunde; ates kor yataginda
+        a = eas.spawn_actor_from_object(efekt, unreal.Vector(*w), unreal.Rotator(0, 0, 0))
+        if not a:
+            return False
+        a.set_actor_label("%sAtes_%02d" % (ETIKET, i))
+        a.set_folder_path("Arena/Susleme/Ates")
+        a.set_actor_scale3d(unreal.Vector(ALEV_OLCEK, ALEV_OLCEK, ALEV_OLCEK))
+    log("   %d mesaleye ates efekti: %s" % (len(MESALE), yol.split("/")[-1]))
+    return True
 
 
 def calistir():
@@ -322,12 +350,14 @@ def calistir():
         log("Mesaleler...")
         yuva = {"Tas": duz("M_MesaleTas", (0.2, 0.18, 0.15), 0.85),
                 "Bronz": duz("M_MesaleBronz", (0.55, 0.33, 0.14), 0.4, metal=1.0),
-                "Kor": duz("M_MesaleKor", (0.05, 0.02, 0.01), 0.9, isik=((1.0, 0.35, 0.08), 8.0))}
+                "Kor": duz("M_MesaleKor", (0.05, 0.02, 0.01), 0.9, isik=((1.0, 0.35, 0.08), KOR_ISIK))}
         for i, sm in enumerate(meshler("SM_Mesale.glb", "Mesale")):
             koy(sm, None, "Mesale_%d" % i, arena, carpisma=True, yuvalar=yuva)
-        alev = alev_malzemesi(doku("T_Alev"))
-        for sm in meshler("SM_Alev.glb", "Alev"):
-            koy(sm, alev, "Alev", arena)
+        if not niagara_ates(arena):
+            log("   Niagara ates efekti bulunamadi - alev kartlari kullaniliyor")
+            alev = alev_malzemesi(doku("T_Alev"))
+            for sm in meshler("SM_Alev.glb", "Alev"):
+                koy(sm, alev, "Alev", arena)
         isiklar(arena)
     if PARCALAR["ruzgar"]:
         log("Ruzgar seritleri...")
