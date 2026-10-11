@@ -49,14 +49,15 @@ Ayar: MI_ArenaBolge -> ZeminGucu (0 = kapali), ZeminParlaklik, BirikintiEsik (ku
 Derlenmezse script kendiliginden sadelestirir: tam (dalgali birikinti) -> birikintili (dalgasiz) -> sadece levha ->
 zeminsiz. Hangisinin kuruldugu Output Log'da `su tribunu zemini:` satirinda yazar.
 
-## Hava tribunu mermer kaplamasi (ArenaBolgeDoku.py icinde)
-Hava bolgesine (Kaynak/T_ArenaHavaMaske.png) dunyaya hizali, ucyonlu (duvar + zemin) kesme mermer bloklar: 50 cm'lik
-siralar, 0.8-1.4 m bloklar, ince derz, cilali yuzey (Kaynak/T_Mermer_D: renk + alfa puruzluluk, T_Mermer_N).
-Eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur. Uretim: `araclar/bolge_doku/mermer_doku.py`,
-`hava_maske.py`. Onizleme: Kaynak/M_Mermer_onizleme.jpg (sol ust referans).
-Ayar: MI_ArenaBolge -> MermerGucu (0 = kapali), MermerParlaklik, MermerTon, MermerOlcek (cm, blok buyuklugu),
-MermerAO (eski golgeler), MermerAOOrta, MermerPuruz (cila), MermerNormal (derz derinligi).
-Derlenmezse sorunlu katman ayri bulunur: su zemini ve mermer birbirini etkilemeden sadelesir.
+## Tribun kaplamalari: hava mermeri, orman yosunlu tasi (ArenaBolgeDoku.py icinde)
+Bolgeler: Kaynak/T_ArenaKaplamaMaske.png (R = hava, G = orman; `araclar/bolge_doku/kaplama_maske.py`). Dunyaya
+hizali ucyonlu kesme tas: duvarlar dahil derzli kusursuz kaplama, eski dokunun golgeleri hafifce korunur.
+- Hava: cilali krem mermer bloklar (T_Mermer_D/N, `mermer_doku.py`). Onizleme: Kaynak/M_Mermer_onizleme.jpg
+- Orman: asinmis gri tas (T_OrmanTas_D/N) + yukari bakan yuzlerde yogun, duvarlarda lekeli yosun (T_Yosun_D,
+  alfa = buyume gurultusu; `orman_doku.py`). Onizleme: Kaynak/M_Orman_onizleme.jpg (sol ust referans)
+Ayar: MI_ArenaBolge -> Mermer*/Orman*: Gucu (0 = kapali), Parlaklik, Ton, Olcek (cm, blok buyuklugu), AO, AOOrta,
+Puruz, Normal; YosunMiktar (cok/az yosun), YosunUst (ust yuzlerde fazlalik), YosunParlaklik.
+Derlenmezse her katman tek basina denenir: su zemini ve kaplamalar birbirini etkilemeden sadelesir.
 
 ## Fab merdivenleri (FabMerdiven.py)
 Fab'dan indirilen Megascans "Castle Stairs" (scfdy) modulleri ates ve su tribunlerinin 6 oturma dilimine (ara bolme

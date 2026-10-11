@@ -6,8 +6,9 @@
 #        A=su tribunu zemin bolgesi.
 # Su tribunu zemini: yukari bakan yuzlere dunyaya hizali net tas levha (T_SuZemin_*), yuksek teraslarda ve kule
 # tepelerinde parlayan/yansitan dalgali su birikintileri.
-# Hava tribunu: Kaynak/T_ArenaHavaMaske.png bolgesinde dunyaya hizali ucyonlu kesme mermer bloklar (T_Mermer_D/N),
-# duvarlar dahil derzli kusursuz kaplama; eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur.
+# Kaplamalar (Kaynak/T_ArenaKaplamaMaske.png R = hava, G = orman): dunyaya hizali ucyonlu kesme tas, duvarlar dahil
+# derzli kusursuz kaplama. Hava: cilali krem mermer (T_Mermer_D/N). Orman: asinmis gri tas (T_OrmanTas_D/N) + yukari
+# bakan yuzlerde ve duvarlarda lekeli yosun (T_Yosun_D). Eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur.
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/ArenaBolgeDoku.py", encoding="utf-8").read())
 # Geri almak icin arenaya tekrar MI_ArenaTas verilir (dosyanin sonundaki GERI_AL'a bak).
@@ -123,26 +124,45 @@ def zemin_dokulari():
     return sonuc
 
 
-def mermer_dokulari():
-    """Hava tribunu mermer kaplamasi: (bolge maskesi, renk+puruzluluk, normal); biri eksikse katman atlanir."""
-    sonuc = []
-    for dosya, tur in (("T_ArenaHavaMaske.png", "maske"), ("T_Mermer_D.png", "renk"), ("T_Mermer_N.png", "normal")):
+# Kaplama katmanlari: bolge maskesi Kaplama maskesinin kanali; tas dokusu (RGB + A puruzluluk), normal, istege bagli yosun
+KAPLAMA_MASKE = "T_ArenaKaplamaMaske.png"     # R = hava (mermer), G = orman (yosunlu tas)
+KAPLAMALAR = {
+    "mermer": dict(on="Mermer", kanal="R", dosyalar=("T_Mermer_D.png", "T_Mermer_N.png"), parlak=0.42,
+                   ton=(1.0, 0.93, 0.82), olcek=600.0, ao=0.3, ao_orta=0.2, ad="hava mermer kaplamasi"),
+    "orman": dict(on="Orman", kanal="G", dosyalar=("T_OrmanTas_D.png", "T_OrmanTas_N.png", "T_Yosun_D.png"), parlak=0.75,
+                  ton=(1.0, 1.0, 1.0), olcek=500.0, ao=0.35, ao_orta=0.05, ad="orman yosunlu tas kaplamasi"),
+}
+
+
+def kaplama_dokulari():
+    """Her kaplama icin (maske, tas, normal[, yosun]); dosyasi eksik olan kaplama atlanir."""
+    def al(dosya, tur):
         d = aktar(dosya)
         if not d:
-            log("   %s yok - mermer kaplama eklenmeyecek" % dosya)
             return None
-        d.set_editor_property("srgb", tur == "renk")          # renk dokusunun alfasi (puruzluluk) zaten dogrusal
+        d.set_editor_property("srgb", tur == "renk")          # renk dokularinin alfasi zaten dogrusal
         if tur == "normal":
             d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
         elif tur == "maske":
             d.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
         d.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
         eal.save_loaded_asset(d)
-        sonuc.append(d)
+        return d
+    maske = al(KAPLAMA_MASKE, "maske")
+    if not maske:
+        log("   %s yok - kaplamalar eklenmeyecek" % KAPLAMA_MASKE)
+        return {}
+    sonuc = {}
+    for ad, k in KAPLAMALAR.items():
+        dl = [maske] + [al(f, "normal" if f.endswith("_N.png") else "renk") for f in k["dosyalar"]]
+        if all(dl):
+            sonuc[ad] = dl
+        else:
+            log("   %s dokulari eksik - atlanacak" % k["ad"])
     return sonuc
 
 
-def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, mermer=None, mseviye=2):
+def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, kaplama=None):
     """M_ArenaTas ile ayni yapi, renk dokusu degistirilebilir parametre (Renk)."""
     yol = HEDEF + "/M_ArenaBolge"
     if eal.does_asset_exist(yol):
@@ -215,6 +235,34 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, me
         e.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
         bag(a, ca, e, "")
         return e
+
+    def eksen(kaynak, v, x, y):
+        """dunya vektorunun bir ekseni (skaler): kaynak . v"""
+        e = ifade(unreal.MaterialExpressionDotProduct, x, y)
+        bag(kaynak, "", e, "A")
+        bag(vek3(v[0], v[1], v[2], x - 150, y + 60), "", e, "B")
+        return e
+
+    def ekle(a, b, x, y, ca="", cb=""):
+        e = ifade(unreal.MaterialExpressionAppendVector, x, y)
+        bag(a, ca, e, "A")
+        bag(b, cb, e, "B")
+        return e
+
+    def bol(a, b, x, y):
+        e = ifade(unreal.MaterialExpressionDivide, x, y)
+        bag(a, "", e, "A")
+        bag(b, "", e, "B")
+        return e
+
+    def sinirla(a, alt, ust, x, y):
+        e1 = ifade(unreal.MaterialExpressionMax, x, y)
+        bag(a, "", e1, "A")
+        bag(sabit(alt, x - 100, y + 60), "", e1, "B")
+        e2 = ifade(unreal.MaterialExpressionMin, x + 100, y)
+        bag(e1, "", e2, "A")
+        bag(sabit(ust, x, y + 60), "", e2, "B")
+        return e2
 
     def ortak_ornekleyici(t):
         try:
@@ -380,98 +428,106 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, me
         e = topla(e, isik, X + 1250, 2300) if e else isik
         return r, (pr, ""), n, e
 
-    def mermer_katmani(mermer, renk_in, puruz_in, normal_in, mseviye):
-        """Hava tribunu: dunyaya hizali ucyonlu kesme mermer bloklar (duvarlar dahil kusursuz kaplama).
-        mseviye 1: renk + puruzluluk  2: + blok/derz normali. Sadece skaler carpim, DotProduct ve AppendVector."""
-        hm, mD, mN = mermer
-        X, Y0 = 1800, 3000
+    ucyon = {}
 
-        def eksen(kaynak, v, x, y):
-            e = ifade(unreal.MaterialExpressionDotProduct, x, y)
-            bag(kaynak, "", e, "A")
-            bag(vek3(v[0], v[1], v[2], x - 150, y + 60), "", e, "B")
-            return e
-
-        def ekle(a, b, x, y, ca="", cb=""):
-            e = ifade(unreal.MaterialExpressionAppendVector, x, y)
-            bag(a, ca, e, "A")
-            bag(b, cb, e, "B")
-            return e
-
-        def bol(a, b, x, y):
-            e = ifade(unreal.MaterialExpressionDivide, x, y)
-            bag(a, "", e, "A")
-            bag(b, "", e, "B")
-            return e
-
-        def sinirla(a, alt, ust, x, y):
-            e1 = ifade(unreal.MaterialExpressionMax, x, y)
-            bag(a, "", e1, "A")
-            bag(sabit(alt, x - 100, y + 60), "", e1, "B")
-            e2 = ifade(unreal.MaterialExpressionMin, x + 100, y)
-            bag(e1, "", e2, "A")
-            bag(sabit(ust, x, y + 60), "", e2, "B")
-            return e2
-
-        # bolge agirligi: arena UV'sindeki maske * MermerGucu
-        t_hm = doku(hm, ST.SAMPLERTYPE_MASKS, X - 600, Y0 - 300)
-        ortak_ornekleyici(t_hm)
-        w = carp(t_hm, skaler("MermerGucu", 1.0, X - 600, Y0 - 150), X - 400, Y0 - 300, "R")
-        # dunya eksenleri ve ucyonlu agirliklar (n^4, toplami 1)
-        wp = ifade(unreal.MaterialExpressionWorldPosition, X - 1500, Y0)
-        wx, wy, wz = (eksen(wp, v, X - 1300, Y0 + i * 120) for i, v in enumerate(((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))))
-        nw = ifade(unreal.MaterialExpressionVertexNormalWS, X - 1500, Y0 + 500)
-        ag = []
+    def ucyon_temel():
+        """Dunya eksenleri ve ucyonlu agirliklar (n^4, toplami 1); butun kaplamalar paylasir."""
+        if ucyon:
+            return ucyon
+        X, Y0 = 600, 3000
+        wp = ifade(unreal.MaterialExpressionWorldPosition, X - 300, Y0)
+        ucyon["w"] = [eksen(wp, v, X - 100, Y0 + i * 120) for i, v in enumerate(((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)))]
+        nw = ifade(unreal.MaterialExpressionVertexNormalWS, X - 300, Y0 + 500)
+        ag, nz = [], None
         for i, v in enumerate(((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))):
-            a = eksen(nw, v, X - 1300, Y0 + 500 + i * 120)
-            a2 = carp(a, a, X - 1050, Y0 + 500 + i * 120)                  # kare: isaret gerekmez
-            ag.append(carp(a2, a2, X - 950, Y0 + 500 + i * 120))
-        top = topla(topla(ag[0], ag[1], X - 850, Y0 + 560), ag[2], X - 750, Y0 + 600)
-        aX, aY, aZ = (bol(a, top, X - 650, Y0 + 500 + i * 120) for i, a in enumerate(ag))
+            a = eksen(nw, v, X - 100, Y0 + 500 + i * 120)
+            nz = a
+            a2 = carp(a, a, X + 50, Y0 + 500 + i * 120)                    # kare: isaret gerekmez
+            ag.append(carp(a2, a2, X + 150, Y0 + 500 + i * 120))
+        top = topla(topla(ag[0], ag[1], X + 250, Y0 + 560), ag[2], X + 350, Y0 + 600)
+        ucyon["a"] = dict(zip("XYZ", (bol(a, top, X + 450, Y0 + 500 + i * 120) for i, a in enumerate(ag))))
+        ucyon["nz"] = nz
+        return ucyon
+
+    def kaplama_katmani(ad, dl, renk_in, puruz_in, normal_in, kseviye, Y0):
+        """Bolgeye dunyaya hizali ucyonlu kesme tas kaplama (duvarlar dahil). kseviye 1: renk + puruzluluk,
+        2: + blok/derz normali. Yosunlu ise yukari bakan yuzlerde ve buyume gurultusune gore duvarlarda yosun.
+        Sadece skaler carpim, DotProduct ve AppendVector (UE 5.8 karisik boyut hatasindan uzak)."""
+        k = KAPLAMALAR[ad]
+        on = k["on"]
+        t_mask, tD, tN = dl[:3]
+        tY = dl[3] if len(dl) > 3 else None
+        X = 1800
+        tem = ucyon_temel()
+        wx, wy, wz = tem["w"]
+        ag = tem["a"]
+        t_hm = doku(t_mask, ST.SAMPLERTYPE_MASKS, X - 600, Y0 - 300)
+        ortak_ornekleyici(t_hm)
+        w = carp(t_hm, skaler(on + "Gucu", 1.0, X - 600, Y0 - 150), X - 400, Y0 - 300, k["kanal"])
         # UV'ler: zemin (x, y), X'e bakan duvar (y, -z), Y'ye bakan duvar (x, -z); siralar duvarda yatay
-        k = bol(sabit(1.0, X - 1300, Y0 + 400), skaler("MermerOlcek", 600.0, X - 1300, Y0 + 460), X - 1150, Y0 + 400)
-        u_x, u_y = carp(wx, k, X - 1000, Y0), carp(wy, k, X - 1000, Y0 + 100)
-        u_z = carp(carp(wz, k, X - 1000, Y0 + 200), sabit(-1.0, X - 1000, Y0 + 260), X - 900, Y0 + 200)
+        kk = bol(sabit(1.0, X - 1300, Y0 + 400), skaler(on + "Olcek", k["olcek"], X - 1300, Y0 + 460), X - 1150, Y0 + 400)
+        u_x, u_y = carp(wx, kk, X - 1000, Y0), carp(wy, kk, X - 1000, Y0 + 100)
+        u_z = carp(carp(wz, kk, X - 1000, Y0 + 200), sabit(-1.0, X - 1000, Y0 + 260), X - 900, Y0 + 200)
         uvlar = {"Z": ekle(u_x, u_y, X - 800, Y0), "X": ekle(u_y, u_z, X - 800, Y0 + 100), "Y": ekle(u_x, u_z, X - 800, Y0 + 200)}
-        agirlik = {"X": aX, "Y": aY, "Z": aZ}
-        D, N = {}, {}
-        for i, e in enumerate("XYZ"):
-            D[e] = doku(mD, ST.SAMPLERTYPE_COLOR, X - 500, Y0 + i * 250)
-            bag(uvlar[e], "", D[e], "UVs")
-            ortak_ornekleyici(D[e])
-        renk_m = topla(topla(carp(D["X"], aX, X - 250, Y0, "RGB"), carp(D["Y"], aY, X - 250, Y0 + 100, "RGB"), X - 100, Y0),
-                       carp(D["Z"], aZ, X - 250, Y0 + 200, "RGB"), X + 50, Y0)
-        puruz_m = topla(topla(carp(D["X"], aX, X - 250, Y0 + 300, "A"), carp(D["Y"], aY, X - 250, Y0 + 400, "A"), X - 100, Y0 + 300),
-                        carp(D["Z"], aZ, X - 250, Y0 + 500, "A"), X + 50, Y0 + 300)
-        # ton (vektor parametresinin R, G, B'si ayri alinip birlestirilir), parlaklik, eski dokunun golgesi (AO)
+
+        def ornekle(tex, tur, y):
+            t = {}
+            for i, e in enumerate("XYZ"):
+                t[e] = doku(tex, tur, X - 500, y + i * 250)
+                bag(uvlar[e], "", t[e], "UVs")
+                ortak_ornekleyici(t[e])
+            return t
+
+        def karisim(t, kanal, y):
+            return topla(topla(carp(t["X"], ag["X"], X - 250, y, kanal), carp(t["Y"], ag["Y"], X - 250, y + 80, kanal), X - 100, y),
+                         carp(t["Z"], ag["Z"], X - 250, y + 160, kanal), X + 50, y)
+        D = ornekle(tD, ST.SAMPLERTYPE_COLOR, Y0)
+        renk_m = karisim(D, "RGB", Y0)
+        puruz_m = carp(karisim(D, "A", Y0 + 300), skaler(on + "Puruz", 1.0, X + 50, Y0 + 400), X + 200, Y0 + 300)
+        # ton (vektor parametresinin R, G, B'si ayri alinip birlestirilir), parlaklik
         ton = ifade(unreal.MaterialExpressionVectorParameter, X - 100, Y0 - 300)
-        ton.set_editor_property("parameter_name", "MermerTon")
-        ton.set_editor_property("default_value", unreal.LinearColor(1.0, 0.93, 0.82, 1.0))
+        ton.set_editor_property("parameter_name", on + "Ton")
+        ton.set_editor_property("default_value", unreal.LinearColor(k["ton"][0], k["ton"][1], k["ton"][2], 1.0))
         ton3 = ekle(ekle(ton, ton, X + 50, Y0 - 300, "R", "G"), ton, X + 150, Y0 - 300, "", "B")
+        renk_m = carp(carp(renk_m, ton3, X + 300, Y0), skaler(on + "Parlaklik", k["parlak"], X + 300, Y0 + 80), X + 450, Y0)
+        yc = None
+        if tY:
+            # yosun: yukari bakma * YosunUst + buyume gurultusu * 0.9 + YosunMiktar - 1, keskinlestirilmis
+            Yd = ornekle(tY, ST.SAMPLERTYPE_COLOR, Y0 + 1600)
+            yrenk = carp(karisim(Yd, "RGB", Y0 + 1600), skaler("YosunParlaklik", 0.85, X + 50, Y0 + 1700), X + 200, Y0 + 1600)
+            ust = ifade(unreal.MaterialExpressionMax, X - 100, Y0 + 1900)
+            bag(tem["nz"], "", ust, "A")
+            bag(sabit(0.0, X - 200, Y0 + 1960), "", ust, "B")
+            ifd = topla(topla(carp(ust, skaler("YosunUst", 0.45, X - 100, Y0 + 2000), X + 50, Y0 + 1900),
+                              carp(karisim(Yd, "A", Y0 + 2100), sabit(0.9, X + 50, Y0 + 2200), X + 200, Y0 + 2100), X + 300, Y0 + 2000),
+                        topla(skaler("YosunMiktar", 0.4, X + 200, Y0 + 2300), sabit(-1.0, X + 200, Y0 + 2380), X + 350, Y0 + 2300),
+                        X + 450, Y0 + 2100)
+            yc = doygun(carp(ifd, sabit(4.0, X + 450, Y0 + 2200), X + 600, Y0 + 2100), X + 750, Y0 + 2100)
+            renk_m = karis(renk_m, yrenk, yc, X + 600, Y0)
+            puruz_m = karis(puruz_m, sabit(0.92, X + 450, Y0 + 400), yc, X + 600, Y0 + 300)
+        # eski dokunun golgesi (kemer ici, girinti) hafifce korunur
         lum = ifade(unreal.MaterialExpressionDotProduct, X - 100, Y0 - 500)
         bag(renk_in, "", lum, "A")
         bag(vek3(0.3, 0.59, 0.11, X - 250, Y0 - 450), "", lum, "B")
-        oran = sinirla(bol(lum, skaler("MermerAOOrta", 0.2, X - 100, Y0 - 400), X + 50, Y0 - 500), 0.35, 1.15, X + 150, Y0 - 500)
-        ao = karis(sabit(1.0, X + 300, Y0 - 560), oran, skaler("MermerAO", 0.3, X + 300, Y0 - 440), X + 450, Y0 - 500)
-        olcek = carp(skaler("MermerParlaklik", 0.42, X + 300, Y0 - 300), ao, X + 600, Y0 - 400)
-        renk_m = carp(carp(renk_m, ton3, X + 300, Y0, "", ""), olcek, X + 750, Y0)
+        oran = sinirla(bol(lum, skaler(on + "AOOrta", k["ao_orta"], X - 100, Y0 - 400), X + 50, Y0 - 500), 0.35, 1.15, X + 150, Y0 - 500)
+        ao = karis(sabit(1.0, X + 300, Y0 - 560), oran, skaler(on + "AO", k["ao"], X + 300, Y0 - 440), X + 450, Y0 - 500)
+        renk_m = carp(renk_m, ao, X + 750, Y0)
         r = karis(renk_in, renk_m, w, X + 900, Y0 - 100)
-        pr = karis(puruz_in[0], carp(puruz_m, skaler("MermerPuruz", 1.0, X + 50, Y0 + 400), X + 200, Y0 + 300), w,
-                   X + 900, Y0 + 300, puruz_in[1])
-        if mseviye < 2:
+        pr = karis(puruz_in[0], puruz_m, w, X + 900, Y0 + 300, puruz_in[1])
+        if kseviye < 2:
             return r, (pr, ""), normal_in
         # normal: her izdusumun dokusal egimi dunya eksenlerine: Z(u->+x, v->+y), X(u->+y, v->-z), Y(u->+x, v->-z)
-        for i, e in enumerate("XYZ"):
-            N[e] = doku(mN, ST.SAMPLERTYPE_NORMAL, X - 500, Y0 + 800 + i * 250)
-            bag(uvlar[e], "", N[e], "UVs")
-            ortak_ornekleyici(N[e])
+        N = ornekle(tN, ST.SAMPLERTYPE_NORMAL, Y0 + 800)
 
         def egim(e, kanal, y):
-            return carp(agirlik[e], N[e], X - 250, y, "", kanal)
+            return carp(ag[e], N[e], X - 250, y, "", kanal)
         px_ = topla(egim("Z", "R", Y0 + 800), egim("Y", "R", Y0 + 880), X - 100, Y0 + 800)
         py_ = topla(egim("Z", "G", Y0 + 960), egim("X", "R", Y0 + 1040), X - 100, Y0 + 960)
         pz_ = carp(topla(egim("X", "G", Y0 + 1120), egim("Y", "G", Y0 + 1200), X - 100, Y0 + 1120), sabit(-1.0, X - 100, Y0 + 1200), X + 50, Y0 + 1120)
-        egim3 = carp(ekle(ekle(px_, py_, X + 150, Y0 + 900), pz_, X + 250, Y0 + 950), skaler("MermerNormal", 1.0, X + 250, Y0 + 1050), X + 400, Y0 + 950)
+        guc = skaler(on + "Normal", 1.0, X + 250, Y0 + 1050)
+        if yc:   # yosunda tas derzleri yumusar
+            guc = carp(guc, topla(sabit(1.0, X + 250, Y0 + 1150), carp(yc, sabit(-0.7, X + 250, Y0 + 1230), X + 350, Y0 + 1200), X + 450, Y0 + 1150), X + 550, Y0 + 1100)
+        egim3 = carp(ekle(ekle(px_, py_, X + 150, Y0 + 900), pz_, X + 250, Y0 + 950), guc, X + 400, Y0 + 950)
         nd = ifade(unreal.MaterialExpressionNormalize, X + 650, Y0 + 900)
         bag(topla(ifade(unreal.MaterialExpressionVertexNormalWS, X + 400, Y0 + 850), egim3, X + 550, Y0 + 900), "", nd, "")
         n_in = normal_in if normal_in else vek3(0.0, 0.0, 1.0, X + 650, Y0 + 800)
@@ -500,8 +556,9 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, me
     if t_m and zemin:
         zemin_katmani = su_zemini(zemin, t_m, taban_renk, puruz_son, normal_son, emis_son, seviye)
         taban_renk, puruz_son, normal_son, emis_son = zemin_katmani
-    if mermer and mseviye > 0:
-        taban_renk, puruz_son, normal_son = mermer_katmani(mermer, taban_renk, puruz_son, normal_son, mseviye)
+    for i, (ad, (dl, ks)) in enumerate((kaplama or {}).items()):
+        if ks > 0:
+            taban_renk, puruz_son, normal_son = kaplama_katmani(ad, dl, taban_renk, puruz_son, normal_son, ks, 3000 + i * 3000)
 
     mel.connect_material_property(taban_renk, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(puruz_son[0], puruz_son[1], unreal.MaterialProperty.MP_ROUGHNESS)
@@ -531,42 +588,44 @@ def derlendi_mi(mat):
 ZEMIN_SEVIYE = {3: "tam (dalgali su birikintisi)", 2: "birikintili (dalgasiz)", 1: "sadece tas levha", 0: "EKLENEMEDI (arena zeminsiz kuruldu)"}
 
 
-MERMER_SEVIYE = {2: "tam (bloklar + derz normali)", 1: "renk ve parlaklik (normalsiz)", 0: "EKLENEMEDI"}
+KAPLAMA_SEVIYE = {2: "tam (bloklar + derz normali)", 1: "renk ve parlaklik (normalsiz)", 0: "EKLENEMEDI"}
 
 
-def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, mermer):
-    """Zemin ve mermer katmanlarini tam kurmayi dener; derlenmezse sorunlu katmani ayri ayri bulup sadelestirir,
-    en son ikisi de olmadan kurar (arena asla dokusuz kalmaz). Doner: (malzeme, zemin seviyesi, mermer seviyesi)."""
-    def dene(z, m):
+def guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, kaplama_dok):
+    """Su zemini ve kaplamalari tam kurmayi dener; derlenmezse her katmani tek basina deneyip sorunluyu sadelestirir,
+    sonra calisanlari birlestirir (arena asla dokusuz kalmaz). Doner: (malzeme, {katman: seviye})."""
+    seviyeler = {}
+    if zemin:
+        seviyeler["zemin"] = (3, 2, 1)
+    for ad in kaplama_dok:
+        seviyeler[ad] = (2, 1)
+
+    def dene(sec):
         try:
-            mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin if z else None, z or 3, mermer if m else None, m)
+            kap = {ad: (kaplama_dok[ad], sec.get(ad, 0)) for ad in kaplama_dok if sec.get(ad, 0)}
+            z = sec.get("zemin", 0)
+            mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin if z else None, z or 3, kap)
             if derlendi_mi(mat):
                 return mat
-            unreal.log_error("[Arena] Zemin %d / mermer %d derlenemedi - sadelestiriliyor. LogMaterial satirlarini gonder." % (z, m))
+            unreal.log_error("[Arena] %s derlenemedi - sadelestiriliyor. LogMaterial satirlarini gonder." % sec)
         except Exception as e:
-            unreal.log_error("[Arena] Zemin %d / mermer %d kurulamadi (%s) - sadelestiriliyor. Bu satiri gonder." % (z, m, e))
+            unreal.log_error("[Arena] %s kurulamadi (%s) - sadelestiriliyor. Bu satiri gonder." % (sec, e))
         return None
-    zs = (3, 2, 1) if zemin else ()
-    ms = (2, 1) if mermer else ()
-    if zs or ms:
-        mat = dene(zs[0] if zs else 0, ms[0] if ms else 0)
+    if seviyeler:
+        tam = {ad: sv[0] for ad, sv in seviyeler.items()}
+        mat = dene(tam)
         if mat:
-            return mat, (zs[0] if zs else 0), (ms[0] if ms else 0)
-        z_iyi = next((z for z in zs if (ms or z != zs[0]) and dene(z, 0)), 0)     # her katman tek basina
-        m_iyi = next((m for m in ms if (zs or m != ms[0]) and dene(0, m)), 0)
-        if z_iyi and m_iyi:
-            mat = dene(z_iyi, m_iyi)
+            return mat, tam
+        iyi = {}
+        for ad, sv in seviyeler.items():                       # her katman tek basina: calisan en iyi seviye
+            iyi[ad] = next((v for v in sv if (len(seviyeler) > 1 or v != sv[0]) and dene({ad: v})), 0)
+        sec = {ad: v for ad, v in iyi.items() if v}
+        while sec:                                               # birlikte; olmazsa sondakini birakarak
+            mat = dene(sec)
             if mat:
-                return mat, z_iyi, m_iyi
-        if z_iyi or m_iyi:
-            z, m = (z_iyi, 0) if z_iyi else (0, m_iyi)
-            mat = dene(z, m)
-            if mat:
-                return mat, z, m
-    mat = malzeme(renk, normal, orm, detay_d, detay_n, maske, None)
-    if (zemin or mermer) and not derlendi_mi(mat):
-        unreal.log_error("[Arena] Katmansiz malzeme de 0 komut gosterdi - olcum guvenilmez olabilir. Bu satiri gonder.")
-    return mat, 0, 0
+                return mat, sec
+            sec.pop(list(sec)[-1])
+    return malzeme(renk, normal, orm, detay_d, detay_n, maske, None), {}
 
 
 def calistir():
@@ -587,12 +646,13 @@ def calistir():
 
     maske = maske_dokusu()
     zemin = zemin_dokulari() if maske else None
-    mermer = mermer_dokulari()
-    log("   su tribunu zemini: %s, hava mermeri: %s" % ("var" if zemin else "yok", "var" if mermer else "yok"))
+    kaplama_dok = kaplama_dokulari()
+    log("   su tribunu zemini: %s, kaplamalar: %s" % ("var" if zemin else "yok", ", ".join(kaplama_dok) or "yok"))
     log("2/3 Malzeme: M_ArenaBolge")
-    mat, seviye, mseviye = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, mermer)
-    log("   su tribunu zemini: %s" % ZEMIN_SEVIYE[seviye])
-    log("   hava mermer kaplamasi: %s" % (MERMER_SEVIYE[mseviye] if mermer else "dokular yok"))
+    mat, sec = guvenli_malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin, kaplama_dok)
+    log("   su tribunu zemini: %s" % ZEMIN_SEVIYE[sec.get("zemin", 0)])
+    for ad, k in KAPLAMALAR.items():
+        log("   %s: %s" % (k["ad"], KAPLAMA_SEVIYE[sec.get(ad, 0)] if ad in kaplama_dok else "dokular yok"))
     mi_yol = HEDEF + "/MI_ArenaBolge"
     mi = eal.load_asset(mi_yol) if eal.does_asset_exist(mi_yol) else \
         tools.create_asset("MI_ArenaBolge", HEDEF, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -606,7 +666,7 @@ def calistir():
     log("3/3 Arenaya ataniyor...")
     malzeme_ata(aktor, sm, mi)
     les.save_current_level()
-    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu, ZeminGucu, ZeminParlaklik, BirikintiEsik, ZeminSuParilti, MermerGucu, MermerParlaklik, MermerTon, MermerOlcek, MermerAO, MermerAOOrta, MermerPuruz, MermerNormal)")
+    log("TAMAM - Arena bolgelere gore boyandi. Ayar: " + mi_yol + " (Parlaklik, LavGucu, LavHiz, SuIsiltisi, SuHiz, ParlakPuruz, DetayTekrar, DetayGucu, ZeminGucu, ZeminParlaklik, BirikintiEsik, ZeminSuParilti, Mermer*/Orman*: Gucu, Parlaklik, Ton, Olcek, AO, AOOrta, Puruz, Normal; YosunMiktar, YosunUst, YosunParlaklik)")
 
 
 calistir()
