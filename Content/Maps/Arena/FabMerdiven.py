@@ -7,6 +7,10 @@
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/FabMerdiven.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz. Kaldirmak icin KALDIR = True.
+# ELLE OTURTMA (hizli yol): bir merdiveni (MR_Merdiven_...) gorus alaninda tasi/dondur/olcekle, secili birak, scripti
+# calistir -> butun merdivenler ayni oturusla yeniden dizilir. Oturus Saved/MerdivenOrnek.json'a kaydedilir, sonraki
+# calistirmalarda da kullanilir. Unutmak icin SIFIRLA = True.
+import json
 import math
 import os
 import unreal
@@ -23,6 +27,8 @@ ETIKET = "MR_Merdiven"
 ESKI = ("BK_Basamak",)      # bunlarla baslayan eski aktorler silinir
 KLASOR = "Arena/Merdiven"
 KALDIR = False
+SIFIRLA = False             # True: kayitli elle oturtma silinir, otomatik dizilise donulur
+ORNEK_DOSYA = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir()), "MerdivenOrnek.json")
 
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
@@ -83,9 +89,11 @@ def eksen_haritasi():
     """Kaynak/SM_EksenIsaret.glb koseleri glTF'te (10,0,0) (0,20,0) (0,0,30) m. Ice aktarilinca kutusundan her UE
     ekseninin hangi glTF eksenine, hangi isaretle ve kac cm/m ile karsilik geldigi okunur (arena ayni yolla geldi)."""
     hedef = HEDEF + "/Isaret"
-    if not aktar("SM_EksenIsaret.glb", hedef):
-        hata("SM_EksenIsaret.glb bulunamadi: " + KAYNAK)
-    mesh = ilk_mesh(hedef)
+    mesh = ilk_mesh(hedef) if eal.does_directory_exist(hedef) else None     # bir kez aktarilir
+    if not mesh:
+        if not aktar("SM_EksenIsaret.glb", hedef):
+            hata("SM_EksenIsaret.glb bulunamadi: " + KAYNAK)
+        mesh = ilk_mesh(hedef)
     if not mesh:
         hata("Eksen isareti aktarilamadi (" + hedef + ").")
     mn, mx = kutu(mesh)
@@ -273,6 +281,79 @@ def fark(a, b):
     return tuple(a[i] - b[i] for i in range(3))
 
 
+def nokta(a, b):
+    return sum(a[i] * b[i] for i in range(3))
+
+
+def eksenler(r):
+    """Aktorun yerel X, Y, Z eksenlerinin dunyadaki yonleri (UE FRotationMatrix satirlari)."""
+    P, Y, R = math.radians(r[0]), math.radians(r[1]), math.radians(r[2])
+    SP, CP, SY, CY, SR, CR = math.sin(P), math.cos(P), math.sin(Y), math.cos(Y), math.sin(R), math.cos(R)
+    return ((CP * CY, CP * SY, SP),
+            (SR * SP * CY - CR * SY, SR * SP * SY + CR * CY, -SR * CP),
+            (-(CR * SP * CY + SR * SY), CY * SR - CR * SP * SY, CR * CP))
+
+
+def cerceve(o, dunya):
+    """Modulun dunyadaki cercevesi: on-alt-orta nokta F, yukselis yonu a, yan yon v, olculeri (cm)."""
+    yon = o["yon"]
+    F = dunya(o["on"])
+    D = fark(dunya(topla(o["on"], yon, o["derinlik"])), F)
+    derin = math.hypot(D[0], D[1])
+    a = (D[0] / derin, D[1] / derin, 0.0)
+    gen = math.sqrt(sum(c * c for c in fark(dunya(topla(o["on"], (-yon[2], 0.0, yon[0]), o["genislik"])), F)))
+    yuk = dunya(topla(o["on"], (0.0, 1.0, 0.0), o["yukseklik"]))[2] - F[2]
+    return dict(F=F, a=a, v=(-a[1], a[0], 0.0), olcu=(derin, gen, yuk), yaw=math.degrees(math.atan2(a[1], a[0])))
+
+
+def secili_ornek():
+    """Secili tek MR_Merdiven aktoru: elle oturtulmus ornek."""
+    try:
+        secili = [a for a in eas.get_selected_level_actors() if a.get_actor_label().startswith(ETIKET + "_")]
+    except Exception:
+        return None
+    if len(secili) != 1:
+        if secili:
+            log("   %d merdiven secili - ornek icin sadece birini sec" % len(secili))
+        return None
+    a = secili[0]
+    parca = a.get_actor_label()[len(ETIKET) + 1:].rsplit("_", 2)
+    try:
+        anahtar = (parca[0], int(parca[1]), int(parca[2]))
+    except Exception:
+        log("   secili aktorun adi taninmadi: " + a.get_actor_label())
+        return None
+    p, r, s = a.get_actor_location(), a.get_actor_rotation(), a.get_actor_scale3d()
+    return dict(anahtar=anahtar, konum=(p.x, p.y, p.z), donus=(r.pitch, r.yaw, r.roll), olcek=(s.x, s.y, s.z))
+
+
+def oturus_olc(ornek, c):
+    """Ornegin kendi modul cercevesine gore oturusu, modul olculerine bolunmus (baska modullere tasinabilir)."""
+    d = fark(ornek["konum"], c["F"])
+    M = eksenler(ornek["donus"])
+    yonler = (c["a"], c["v"], (0.0, 0.0, 1.0))
+    # her yerel eksen hangi cerceve eksenine denk (en iyi eslesme, tekrarsiz)
+    puan = sorted(((abs(nokta(M[i], yonler[j])), i, j) for i in range(3) for j in range(3)), reverse=True)
+    es, kullanilan = {}, set()
+    for _, i, j in puan:
+        if i not in es and j not in kullanilan:
+            es[i] = j
+            kullanilan.add(j)
+    olcu = c["olcu"]
+    return dict(ileri=nokta(d, c["a"]) / olcu[0], yan=nokta(d, c["v"]) / olcu[1], yukari=d[2] / olcu[2],
+                yaw=ornek["donus"][1] - c["yaw"], pitch=ornek["donus"][0], roll=ornek["donus"][2],
+                es=[es[i] for i in range(3)], olcek=[ornek["olcek"][i] / olcu[es[i]] for i in range(3)])
+
+
+def oturus_uygula(ot, c):
+    """Kayitli oturusu bir modulun cercevesine uygular: konum, donus, olcek."""
+    olcu = c["olcu"]
+    konum = topla(topla(topla(c["F"], c["a"], ot["ileri"] * olcu[0]), c["v"], ot["yan"] * olcu[1]),
+                  (0.0, 0.0, 1.0), ot["yukari"] * olcu[2])
+    donus = unreal.Rotator(roll=ot["roll"], pitch=ot["pitch"], yaw=c["yaw"] + ot["yaw"])
+    return konum, donus, [ot["olcek"][i] * olcu[ot["es"][i]] for i in range(3)]
+
+
 def eski_json_temizle():
     """Onceki surumun Kaynak'a indirdigi json'u ve Unreal'in ondan yaptigi varligi kaldir (DataTable sorusu cikmasin)."""
     yol = os.path.join(KAYNAK, "merdiven_yerlesim.json")
@@ -284,9 +365,21 @@ def eski_json_temizle():
             eal.delete_asset(v)
 
 
+def koy(sm, o, konum, donus, olc, malz):
+    a = eas.spawn_actor_from_object(sm, V(*konum), donus)
+    a.set_actor_scale3d(V(*olc))
+    a.set_actor_label("%s_%s_%d_%d" % (ETIKET, o["dilim"], o["sira"], o["sutun"]))
+    a.set_folder_path(KLASOR)
+    bolge = o["dilim"].split("_")[0]
+    if bolge in malz:
+        a.static_mesh_component.set_material(0, malz[bolge])
+    return a
+
+
 def calistir():
     eski_json_temizle()
     arena = arena_aktoru()
+    ornek = None if KALDIR else secili_ornek()     # silmeden once
     n = 0
     for a in eas.get_all_level_actors():
         etiket = a.get_actor_label()
@@ -300,11 +393,52 @@ def calistir():
         log("KALDIRILDI.")
         return
 
-    log("1/4 Eksenler olculuyor...")
+    log("1/3 Eksenler...")
     harita, birim = eksen_haritasi()
     dunya = dunya_donusumu(arena, harita, birim)
-    log("2/4 Fab merdiveni inceleniyor...")
+    if DIZILIS not in YERLESIM:
+        hata("DIZILIS '%s' yok; secenekler: %s" % (DIZILIS, ", ".join(YERLESIM)))
+    moduller = [dict(zip(ALANLAR, m)) for m in YERLESIM[DIZILIS]]
     sm = merdiven_mesh()
+    malz = bolge_malzemeleri(sm)
+
+    # elle oturtma: secili ornek > kayitli oturus > otomatik
+    ot = None
+    if SIFIRLA and os.path.isfile(ORNEK_DOSYA):
+        os.remove(ORNEK_DOSYA)
+        log("   kayitli elle oturtma silindi")
+    if ornek:
+        o = next((m for m in moduller if (m["dilim"], m["sira"], m["sutun"]) == ornek["anahtar"]), None)
+        if o is None:
+            log("   ornek bu dizilisde yok (%s) - otomatik dizilecek" % (ornek["anahtar"],))
+        else:
+            ot = oturus_olc(ornek, cerceve(o, dunya))
+            ot["dizilis"] = DIZILIS
+            with open(ORNEK_DOSYA, "w", encoding="utf-8") as f:
+                json.dump(ot, f)
+            c = cerceve(o, dunya)
+            log("   ornek %s_%d_%d: ileri %+.0f cm, yana %+.0f cm, yukari %+.0f cm, donus %+.0f, olcek %s" % (
+                ornek["anahtar"][0], ornek["anahtar"][1], ornek["anahtar"][2], ot["ileri"] * c["olcu"][0],
+                ot["yan"] * c["olcu"][1], ot["yukari"] * c["olcu"][2], ot["yaw"],
+                " ".join("%.2f" % x for x in ornek["olcek"])))
+    elif not SIFIRLA and os.path.isfile(ORNEK_DOSYA):
+        with open(ORNEK_DOSYA, encoding="utf-8") as f:
+            ot = json.load(f)
+        if ot.get("dizilis") != DIZILIS:
+            ot = None
+        else:
+            log("   kayitli elle oturtma kullaniliyor (Saved/MerdivenOrnek.json)")
+    if ot:
+        log("3/3 %d merdiven elle oturtulan ornege gore diziliyor..." % len(moduller))
+        for o in moduller:
+            konum, donus, olc = oturus_uygula(ot, cerceve(o, dunya))
+            koy(sm, o, konum, donus, olc, malz)
+        les.save_current_level()
+        log("TAMAM - %d merdiven ornege gore dizildi. Birini yine elle duzeltip secili birakarak tekrar calistirabilirsin."
+            % len(moduller))
+        return
+
+    log("2/3 Fab merdiveni inceleniyor...")
     mn, mx = kutu(sm)
     ek, isaret = yukselis_yonu(sm)
     yan = "y" if ek == "x" else "x"
@@ -315,14 +449,8 @@ def calistir():
     yerel_on[ie] = mn[ie] if isaret > 0 else mx[ie]
     yerel_on[iy] = (mn[iy] + mx[iy]) / 2
     alfa = math.atan2(isaret if ek == "y" else 0.0, isaret if ek == "x" else 0.0)
-    malz = bolge_malzemeleri(sm)
 
-    log("3/4 Yerlesim (%s)..." % DIZILIS)
-    if DIZILIS not in YERLESIM:
-        hata("DIZILIS '%s' yok; secenekler: %s" % (DIZILIS, ", ".join(YERLESIM)))
-    moduller = [dict(zip(ALANLAR, m)) for m in YERLESIM[DIZILIS]]
-
-    log("4/4 %d modul diziliyor..." % len(moduller))
+    log("3/3 %d modul diziliyor (%s)..." % (len(moduller), DIZILIS))
     dw = ues.get_editor_world()
     uyum, on_sira, olcekler = 0, 0, []
     for o in moduller:
@@ -348,20 +476,14 @@ def calistir():
         c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
         px, py, pz = (yerel_on[0] * olc[0], yerel_on[1] * olc[1], yerel_on[2] * olc[2])
         konum = (F[0] - (px * c - py * s), F[1] - (px * s + py * c), F[2] - pz)
-        a = eas.spawn_actor_from_object(sm, V(*konum), unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw))
-        a.set_actor_scale3d(V(*olc))
-        a.set_actor_label("%s_%s_%d_%d" % (ETIKET, o["dilim"], o["sira"], o["sutun"]))
-        a.set_folder_path(KLASOR)
-        bolge = o["dilim"].split("_")[0]
-        if bolge in malz:
-            a.static_mesh_component.set_material(0, malz[bolge])
+        koy(sm, o, konum, unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw), olc, malz)
     les.save_current_level()
     oz = lambda i: "%.2f-%.2f" % (min(o[i] for o in olcekler), max(o[i] for o in olcekler))
     log("   olcek araliklari: X %s, Y %s, Z %s" % (oz(0), oz(1), oz(2)))
     log("   on kenar zemin kontrolu: %d/%d on sira modulunun altinda yurume yolu bulundu" % (uyum, on_sira))
     if uyum < on_sira // 2:
         unreal.log_error("[Merdiven] Modullerin cogu yurume yolunun uzerinde degil - eksenler ters olabilir. Bu satirlari gonder.")
-    log("TAMAM - %d Fab merdiveni dizildi (Outliner: %s). Yon ters ise YUKSELIS ayarla; DIZILIS = \"dik\" terasa kadar cikar."
+    log("TAMAM - %d Fab merdiveni dizildi (Outliner: %s). Oturmadiysa birini elle oturt, secili birakip tekrar calistir."
         % (len(moduller), KLASOR))
 
 

@@ -49,6 +49,8 @@ class Paths(_Taban):
     @staticmethod
     def project_content_dir(): return __import__("os").path.abspath(__import__("os").path.join(__import__("os").path.dirname(__file__), "..", "..", "Content")) + "/"
     @staticmethod
+    def project_saved_dir(): return "/tmp/sahte_unreal_saved/"
+    @staticmethod
     def convert_relative_path_to_full(p): return p
 
 _mod = sys.modules[__name__]
@@ -217,12 +219,14 @@ class MaterialEditingLibrary(_Taban):
         return ist
 
 class _Aktor(_Taban):
-    def __init__(self, etiket, konum):
-        self._e, self._k = etiket, konum
+    def __init__(self, etiket, konum, donus=None):
+        self._e, self._k, self._d, self._s = etiket, konum, donus or Rotator(), Vector(1, 1, 1)
+    def get_actor_rotation(self): return self._d
+    def set_actor_scale3d(self, s): self._s = s
     def get_actor_label(self): return self._e
     def set_actor_label(self, e): self._e = e
     def get_actor_location(self): return self._k
-    def get_actor_scale3d(self): return Vector(1, 1, 1)
+    def get_actor_scale3d(self): return self._s
 
 class _EAS(_Taban):
     def __init__(self):
@@ -239,11 +243,13 @@ class _EAS(_Taban):
         for ad, (x, y) in {"Toprak": (1200, 800), "Hava": (1200, -800), "Su": (-1200, -800), "Ates": (-1200, 800)}.items():
             self.aktorler.append(_Aktor("ES_Kure_" + ad, Vector(x, y, 3060)))
     def get_all_level_actors(self): return list(self.aktorler)
+    secili = []
+    def get_selected_level_actors(self): return [a for a in self.secili if a in self.aktorler]
     def destroy_actor(self, a): self.aktorler.remove(a)
     def spawn_actor_from_object(self, o, konum, donus=None):
         if not isinstance(konum, Vector): raise TypeError("konum Vector degil")
         SAYAC["spawn"] += 1
-        a = _Aktor("yeni", konum); self.aktorler.append(a); return a
+        a = _Aktor("yeni", konum, donus); self.aktorler.append(a); return a
     def spawn_actor_from_class(self, c, konum, donus=None):
         return self.spawn_actor_from_object(c, konum, donus)
 

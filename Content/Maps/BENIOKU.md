@@ -58,6 +58,8 @@ YERLESIM bloguna yazar (iki dizilis). Icerik klasorune json konmaz: Unreal onu D
 Eksenler: Kaynak/SM_EksenIsaret.glb ice aktarilip kutusundan glTF -> UE eksen eslemesi okunur.
 Ayarlar (dosya basi): DIZILIS ("dogal" = kendi egimine yakin, ustte set duvari; "dik" = terasa kadar),
 YUKSELIS (yon ters cikarsa "+x"/"-x"/"+y"/"-y"), RENK (malzemede Tint varsa bolge tonu), KALDIR.
+Elle oturtma (hizli yol): bir MR_Merdiven_... aktorunu gorus alaninda tasi/dondur/olcekle, secili birak, scripti
+calistir: butun merdivenler ayni oturusla yeniden dizilir. Oturus Saved/MerdivenOrnek.json'a kaydedilir; SIFIRLA = True unutur.
 
 ## 3D basamaklar (Basamaklar.py) - yerini FabMerdiven.py aldi
 Ates ve su tribunlerinin egik oturma yuzeylerine uretilmis 3D basamak sıralari. FabMerdiven.py calisinca silinir.
