@@ -38,3 +38,6 @@ Onizleme: `Kaynak/T_ArenaBolge_onizleme.jpg`. Uretim araclari: `araclar/bolge_do
 Su tribunune referans resimdeki yerlerinde 8 adet hacimli 3D selale: yuvarlak kesitli isik alan su govdesi, asagi indikce genisleyen serpinti kabugu, buyuk selalelerin dibinde sis.
 Mesh `Kaynak/SM_Selale.glb` arena ile ayni eksenlerde uretildi ve arenanin konumuna konur. Uretim: `araclar/bolge_doku/selale.py`.
 Ayar: `/Game/Maps/Arena/Selale/MI_Selale_Govde`, `_Serpinti`, `_Sis` (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk). Kaldirmak: dosyada `KALDIR = True`.
+Kulelerden akan dereler: su tribunundeki kuleler yukseklik haritasindan bulunur (`araclar/bolge_doku/kule.py`); sahaya bakan
+yuzlerin tepesinden baslayan dereler yercekimiyle duvari izler, cikintidan dokulur, tribune degdiginde biter (`akinti.py`).
+Tribunlere ve kulelerin arka yuzlerine su eklenmez.

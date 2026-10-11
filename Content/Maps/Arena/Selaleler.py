@@ -3,8 +3,10 @@
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/Selaleler.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz: eski selaleyi silip yeniden koyar. Kaldirmak icin KALDIR = True.
-# Hacimli: Govde (yuvarlak kesitli su), Serpinti (genisleyen kopuk kabugu), Sis (buyuk selalelerin dibinde).
-# Ayar: /Game/Maps/Arena/Selale/MI_Selale_Govde, _Serpinti, _Sis  (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk...)
+# Hacimli: Govde (yuvarlak kesitli su), Serpinti (genisleyen kopuk kabugu), Sis (selale dipleri ve carpma yerleri).
+# Ayrica su tribunu kulelerinin sahaya bakan yuzlerinden ~170 dere akar (kule tepesinden baslar, cikintidan dokulur,
+# tribune degdiginde biter) ve kule duvarlarinda ince dalgali su tabakasi (Akinti) vardir.
+# Ayar: /Game/Maps/Arena/Selale/MI_Selale_Govde, _Serpinti, _Sis, _Akinti  (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk...)
 import os
 import unreal
 
@@ -101,6 +103,7 @@ def doku_aktar(dosya, normal=False):
 KATMANLAR = {
     "Govde":    dict(Parlaklik=0.2, Opaklik=1.0, AkisHizi=1.0, KopukEsik=0.58, KopukEk=0.0, KenarYumusak=0.6, OlcekU=0.45, OlcekV=0.06, TabanOpak=0.6),
     "Serpinti": dict(Parlaklik=0.45, Opaklik=0.3, AkisHizi=1.6, KopukEsik=0.35, KopukEk=0.5, KenarYumusak=1.5, OlcekU=0.7, OlcekV=0.09, TabanOpak=0.0),
+    "Akinti":   dict(Parlaklik=0.15, Opaklik=0.4, AkisHizi=0.8, KopukEsik=0.6, KopukEk=0.0, KenarYumusak=0.3, OlcekU=0.8, OlcekV=0.15, TabanOpak=0.1),
     "Sis":      dict(Parlaklik=0.55, Opaklik=0.2, AkisHizi=0.08, KopukEsik=0.0, KopukEk=1.0, KenarYumusak=3.0, OlcekU=0.5, OlcekV=0.5, TabanOpak=0.35),
 }
 
@@ -284,7 +287,7 @@ def calistir():
     c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
     c.set_editor_property("cast_shadow", False)
     les.save_current_level()
-    log("TAMAM - 8 hacimli selale eklendi. Ayar: " + HEDEF + "/MI_Selale_Govde, _Serpinti, _Sis")
+    log("TAMAM - selaleler ve kulelerden akan dereler eklendi. Ayar: " + HEDEF + "/MI_Selale_Govde, _Serpinti, _Sis, _Akinti")
 
 
 calistir()

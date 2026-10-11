@@ -58,7 +58,7 @@ def puf(c,r):
     v*=1+.25*np.sin(v@rng.normal(size=(3,))*2.5)[:,None]           # yumru
     v*=np.array([1,.65,1]);v=v*r+c
     return v,np.tile([.5,.3],(len(v),1)),v[:,[0,1]]*.2,s.faces
-parcalar={'Govde':[],'Serpinti':[],'Sis':[]};bilgi={}
+parcalar={'Govde':[],'Serpinti':[],'Sis':[],'Akinti':[]};bilgi={}
 for ad,(px,py,g,alt) in SELALELER.items():
     r=merkez_hatti(px,py,g,alt)
     if r is None: print(ad,'yok');continue
@@ -74,6 +74,7 @@ for ad,(px,py,g,alt) in SELALELER.items():
     bilgi[ad]=dict(tepe=P.round(2).tolist(),genislik=round(gen,2),boy=round(boy,2))
     print(ad,'genislik %.1f boy %.1f'%(gen,boy))
 json.dump(bilgi,open('selale_bilgi.json','w'),indent=1)
+import akinti;parcalar.setdefault('Akinti',[]);akinti.ekle(parcalar,m,puf)
 bins,views,acc,prims,mats=[],[],[],[],[]
 def ekle(arr,ct,tip,hedef,mm=False):
     b=arr.tobytes();views.append({"buffer":0,"byteOffset":sum(map(len,bins)),"byteLength":len(b),"target":hedef})
