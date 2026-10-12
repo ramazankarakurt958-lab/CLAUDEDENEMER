@@ -142,15 +142,16 @@ def ground_z(world, x, y, z):
     """(x, y) noktasinda yukaridan asagi isin atar, carptigi yuzeyin yuksekligini dondurur."""
     start = unreal.Vector(x, y, z + PROBE_UP)
     end = unreal.Vector(x, y, z - PROBE_DEPTH)
+    channel = getattr(unreal.TraceTypeQuery, "ECC_VISIBILITY", None) or unreal.TraceTypeQuery.TRACE_TYPE_QUERY1
     for complex_trace in (True, False):
         hit = unreal.SystemLibrary.line_trace_single(
-            world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, complex_trace, [],
-            unreal.DrawDebugTrace.NONE, True)
+            world, start, end, channel, complex_trace, [], unreal.DrawDebugTrace.NONE, True)
         if isinstance(hit, tuple):  # bazi surumler (bool, HitResult) dondurur
             hit = hit[1] if hit and hit[0] else None
         if not hit:
             continue
-        parts = unreal.GameplayStatics.break_hit_result(hit)
+        # HitResult.to_tuple(): (blocking_hit, initial_overlap, time, distance, location, ...)
+        parts = hit.to_tuple()
         if isinstance(parts[0], bool) and not parts[0]:  # blocking_hit yok
             continue
         location = next((v for v in parts if isinstance(v, unreal.Vector)), None)
