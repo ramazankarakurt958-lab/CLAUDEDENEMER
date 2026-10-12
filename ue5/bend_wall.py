@@ -27,6 +27,7 @@ SIDE_OFFSET = 0.0          # cm: + duvari arenadan uzaklastirir, - arenaya yakla
 UP_OFFSET = 0.0            # cm: + yukari, - asagi
 
 SEGMENT_LENGTH = 0.0       # Bir parcanin boyu (cm). 0 = duvarin kendi boyu
+OVERLAP = 30.0             # cm: parcalar arasinda bosluk kaliyorsa artir (ornek 50)
 FORWARD_AXIS = "auto"      # Duvarin uzunlugu hangi eksende: "auto", "X" veya "Y"
 ROLL_DEG = "auto"          # Duvar yatik/ters duruyorsa: 0, 90, -90 veya 180 dene
 
@@ -224,7 +225,6 @@ def main():
         raise RuntimeError("Mesh uzunlugu 0 cikti; FORWARD_AXIS ayarini kontrol et.")
     count = max(1, round(length / target))
     seg = length / count  # parcalar yolu tam doldursun diye hafifce esnetilir
-    tan_len = tangent_len(seg)
 
     with unreal.ScopedEditorTransaction("Bend Wall"):
         if CLEAR_PREVIOUS:
@@ -258,8 +258,12 @@ def main():
             return sample(d)
 
         for i in range(count):
-            p0, t0 = point(i * seg)
-            p1, t1 = point((i + 1) * seg)
+            # Megascans parcalarinin uclari kirik; parcalari biraz uzatip ust uste bindiriyoruz
+            d0 = max(0.0, i * seg - OVERLAP)
+            d1 = min(length, (i + 1) * seg + OVERLAP)
+            tan_len = tangent_len(d1 - d0)
+            p0, t0 = point(d0)
+            p1, t1 = point(d1)
 
             actor = actor_sub.spawn_actor_from_class(unreal.SplineMeshActor, p0)
             actor.set_actor_label("BendWall_%03d" % i)
