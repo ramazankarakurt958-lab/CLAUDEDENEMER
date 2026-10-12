@@ -6,7 +6,8 @@
 #        A=su tribunu zemin bolgesi.
 # Su tribunu zemini: yukari bakan yuzlere dunyaya hizali net tas levha (T_SuZemin_*), yuksek teraslarda ve kule
 # tepelerinde parlayan/yansitan dalgali su birikintileri.
-# Kaplamalar (Kaynak/T_ArenaKaplamaMaske.png R = hava, G = orman, B = ates): dunyaya hizali ucyonlu kesme tas, duvarlar dahil
+# Kaplamalar (Kaynak/T_ArenaKaplamaMaske.png R = hava, G = orman, B = ates; su = T_ArenaBolgeMaske A, sadece duvarlar, T_SuTas_*):
+# dunyaya hizali ucyonlu kesme tas, duvarlar dahil
 # derzli kusursuz kaplama. Hava: cilali krem mermer (T_Mermer_D/N). Orman: asinmis gri tas (T_OrmanTas_D/N) + yukari
 # bakan yuzlerde ve duvarlarda lekeli yosun (T_Yosun_D). Ates: komurlesmis koyu tas (T_AtesTas_D/N), lav akintilarina
 # yakin catlak ve derzlerde parlayan lav (T_AtesCatlak). Eski dokunun golgeleri (kemer ici, girintiler) hafifce korunur.
@@ -132,8 +133,11 @@ KAPLAMALAR = {
                    ton=(1.0, 0.93, 0.82), olcek=600.0, ao=0.3, ao_orta=0.2, ad="hava mermer kaplamasi"),
     "orman": dict(on="Orman", kanal="G", dosyalar=("T_OrmanTas_D.png", "T_OrmanTas_N.png", "T_Yosun_D.png"), parlak=0.75,
                   ton=(1.0, 1.0, 1.0), olcek=500.0, ao=0.35, ao_orta=0.05, ad="orman yosunlu tas kaplamasi", ek="yosun"),
-    "ates": dict(on="Ates", kanal="B", dosyalar=("T_AtesTas_D.png", "T_AtesTas_N.png", "T_AtesCatlak.png"), parlak=1.0,
+    "ates": dict(on="Ates", kanal="B", dosyalar=("T_AtesTas_D.png", "T_AtesTas_N.png", "T_AtesCatlak.png"), parlak=1.3,
                  ton=(1.0, 1.0, 1.0), olcek=500.0, ao=0.35, ao_orta=0.03, ad="ates komurlesmis tas + lav catlaklari", ek="catlak"),
+    # su tribunu: bolge maskesinin alfasi (su tribunu bolgesi); sadece dikey yuzeyler (zemin katmani yukari bakanlarda kalir)
+    "su": dict(on="SuTas", kanal="A", maske="T_ArenaBolgeMaske.png", duvar=True, dosyalar=("T_SuTas_D.png", "T_SuTas_N.png"),
+               parlak=0.9, ton=(1.0, 1.0, 1.0), olcek=500.0, ao=0.3, ao_orta=0.05, ad="su tribunu islak tas kaplamasi"),
 }
 
 
@@ -157,7 +161,7 @@ def kaplama_dokulari():
         return {}
     sonuc = {}
     for ad, k in KAPLAMALAR.items():
-        dl = [maske] + [al(f, "normal" if f.endswith("_N.png") else "maske" if "Catlak" in f else "renk") for f in k["dosyalar"]]
+        dl = [al(k["maske"], "maske") if k.get("maske") else maske] + [al(f, "normal" if f.endswith("_N.png") else "maske" if "Catlak" in f else "renk") for f in k["dosyalar"]]
         if all(dl):
             sonuc[ad] = dl
         else:
@@ -468,6 +472,11 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, ka
         t_hm = doku(t_mask, ST.SAMPLERTYPE_MASKS, X - 600, Y0 - 300)
         ortak_ornekleyici(t_hm)
         w = carp(t_hm, skaler(on + "Gucu", 1.0, X - 600, Y0 - 150), X - 400, Y0 - 300, k["kanal"])
+        if k.get("duvar"):    # sadece dikey yuzeyler: 1 - saturate((nz - 0.55) * 6)
+            dz = doygun(carp(topla(tem["nz"], sabit(-0.55, X - 700, Y0 - 50), X - 600, Y0 - 50), sabit(6.0, X - 700, Y0), X - 500, Y0 - 50),
+                        X - 400, Y0 - 50)
+            w = carp(w, topla(sabit(1.0, X - 400, Y0 + 20), carp(dz, sabit(-1.0, X - 400, Y0 + 80), X - 300, Y0 + 20), X - 200, Y0),
+                     X - 100, Y0 - 300)
         # UV'ler: zemin (x, y), X'e bakan duvar (y, -z), Y'ye bakan duvar (x, -z); siralar duvarda yatay
         kk = bol(sabit(1.0, X - 1300, Y0 + 400), skaler(on + "Olcek", k["olcek"], X - 1300, Y0 + 460), X - 1150, Y0 + 400)
         u_x, u_y = carp(wx, kk, X - 1000, Y0), carp(wy, kk, X - 1000, Y0 + 100)
@@ -513,9 +522,9 @@ def malzeme(renk, normal, orm, detay_d, detay_n, maske, zemin=None, seviye=3, ka
         if tC:
             # lav catlaklari: lav akintilarina yakin yerde (maske A) parlar, uzakta sonuk kor (AtesKor)
             C = ornekle(tC, ST.SAMPLERTYPE_MASKS, Y0 + 2600)
-            yakin = topla(skaler("AtesKor", 0.08, X - 100, Y0 + 2900), t_hm, X + 50, Y0 + 2900, "", "A")
+            yakin = topla(skaler("AtesKor", 0.02, X - 100, Y0 + 2900), t_hm, X + 50, Y0 + 2900, "", "A")
             parla = carp(carp(carp(karisim(C, "R", Y0 + 2600), yakin, X + 200, Y0 + 2700), w, X + 350, Y0 + 2700),
-                         skaler("AtesLavGucu", 2.0, X + 350, Y0 + 2800), X + 500, Y0 + 2700)
+                         skaler("AtesLavGucu", 0.9, X + 350, Y0 + 2800), X + 500, Y0 + 2700)
             isik = carp(vek3(1.0, 0.32, 0.07, X + 500, Y0 + 2600), parla, X + 650, Y0 + 2650)
         # eski dokunun golgesi (kemer ici, girinti) hafifce korunur
         lum = ifade(unreal.MaterialExpressionDotProduct, X - 100, Y0 - 500)

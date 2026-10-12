@@ -6,7 +6,8 @@
 # Hacimli: Govde (yuvarlak kesitli su), Serpinti (genisleyen kopuk kabugu), Sis (selale dipleri ve carpma yerleri).
 # Ayrica su tribunu kulelerinin sahaya bakan yuzlerinden ~170 dere akar (kule tepesinden baslar, cikintidan dokulur,
 # tribune degdiginde biter) ve kule duvarlarinda ince dalgali su tabakasi (Akinti) vardir.
-# Ayar: /Game/Maps/Arena/Selale/MI_Selale_Govde, _Serpinti, _Sis, _Akinti  (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk...)
+# Ayar: /Game/Maps/Arena/Selale/MI_Selale_Govde, _Serpinti, _Sis, _Akinti  (Parlaklik, Opaklik, AkisHizi, KopukEsik, KenarYumusak, RenkSu, RenkKopuk,
+#       Puruz, Yansima, Kirilma...)
 import os
 import unreal
 
@@ -203,6 +204,8 @@ def malzeme(akis, nrm):
     # beyaz gokyuzunu ayna gibi yansitip bembeyaz gorunmesin diye orta puruzluluk, dusuk yansima
     mel.connect_material_property(skaler("Puruz", 0.3, 200, -200), "", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.connect_material_property(skaler("Yansima", 0.25, 200, -130), "", unreal.MaterialProperty.MP_SPECULAR)
+    # gercek su gibi arkasini kirarak gostersin (kirilma indisi; 1 = kapali)
+    mel.connect_material_property(skaler("Kirilma", 1.33, 200, -60), "", unreal.MaterialProperty.MP_REFRACTION)
     # Akan dalga normali (gucu %60)
     tN = doku(nrm, uvA, -1200, 250, ST.SAMPLERTYPE_NORMAL)
     duz = ifade(unreal.MaterialExpressionConstant3Vector, -1000, 400)

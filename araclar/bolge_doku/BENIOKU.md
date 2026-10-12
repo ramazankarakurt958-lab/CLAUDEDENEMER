@@ -11,3 +11,4 @@
 8. `kule.py` + `yuzey.py` + `akinti.py`: su tribunu kulelerinin sahadan gorunen yuzleri, kulelerden akan 3D dereler ve ince su tabakasi (selale2.py bunlari SM_Selale.glb'ye ekler).
 9. `zemin_doku.py`: su tribunu zemini icin dikissiz tas levha (renk/normal/puruz), birikinti gurultusu, dalga normali; bolge maskesinin alfa kanali = su tribunu zemin bolgesi.
 10. `basamak.py` + `basamak3d.py`: yukseklik haritasindan oturma bolumleri, her bolume kademeli profil, gercek 3D basamak mesh'i (SM_Basamak.glb, kose rengi = bolge rengi).
+11. `su_doku.py`: su tribunu duvarlari icin islak mavi-gri kesme tas (T_SuTas_D/N); ArenaBolgeDoku "su" kaplamasi (bolge maskesi A, sadece dikey yuzeyler).

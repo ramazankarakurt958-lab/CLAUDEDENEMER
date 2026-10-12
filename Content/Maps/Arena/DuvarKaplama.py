@@ -4,12 +4,13 @@
 # Doku: Kaynak/T_DuvarTas_D.png (A = puruzluluk), T_DuvarTas_N.png. Bolge rengi malzeme ornegindeki Ton'dan gelir; blok blok ton
 # farki, orman yosunu, ates isi ve su buzu mesh'in kose renginde. Ates derzlerinde seyrek kor parlar (KorGucu).
 # Orman duvarlarinda kornisten sarkan sarmasiklar (yuva Orman_Sarmasik, T_Yaprak.png, maskeli iki yuzlu).
-# Ates tribununde 3D lav akintilari: Kaynak/SM_Lav.glb + T_LavAkis.png (akan, nabiz gibi atan kor; MI_Lav: LavGucu, AkisHizi).
+# Ates tribununde 3D lav akintilari: Kaynak/SM_Lav.glb + T_Lav_D/E/N.png (soguyan kabuk plakalari, catlaklardan parlayan erimis
+# kaya, akis yonunde kayar; MI_Lav: LavGucu, AkisHizi (yon ters ise isaretini degistir), Kirmizi/Turuncu/Sari, Nabiz).
 # Calistirma (Output Log -> Python):
 #   exec(open(unreal.Paths.project_content_dir() + "Maps/Arena/DuvarKaplama.py", encoding="utf-8").read())
 # Tekrar calistirmak zararsiz. Kaldirmak icin KALDIR = True.
 # Ayar: /Game/Maps/Arena/Duvar/MI_Duvar_<Bolge>_Blok, _Bezek (Ton, Parlaklik, Olcek, Puruz, NormalGucu), _Harc (HarcRenk, KorGucu),
-#       MI_Duvar_Orman_Sarmasik (Ton), MI_Lav (LavGucu, AkisHizi, Renk)
+#       MI_Duvar_Orman_Sarmasik (Ton), MI_Lav (LavGucu, AkisHizi, Kirmizi, Turuncu, Sari)
 import os
 import unreal
 
@@ -19,7 +20,7 @@ HEDEF = "/Game/Maps/Arena/Duvar"
 ETIKET = "DK_"
 KALDIR = False
 # bolge tonlari (dogrusal renk): Blok, Bezek (kornis/plastir/parapet) ve harc; ates derzlerinde kor
-TON = {"Ates": (0.55, 0.48, 0.44), "Su": (0.78, 0.92, 1.15), "Orman": (0.72, 0.72, 0.64), "Hava": (1.45, 1.40, 1.28)}
+TON = {"Ates": (0.8, 0.7, 0.64), "Su": (0.78, 0.92, 1.15), "Orman": (0.72, 0.72, 0.64), "Hava": (1.45, 1.40, 1.28)}
 BEZEK_ACIK = 1.12
 KOR = {}                 # derz koru: {"Ates": 0.5} gibi (yuksek degerler duvarda parlak seritler yapar)
 
@@ -176,36 +177,42 @@ def sarmasik_malzemesi(tY):
     return m.bitir()
 
 
-def lav_malzemesi(tL):
-    """akan lav: doku akis yonunde kayar, iki katman; parlak damarlar + koyu kabuk, yavas nabiz"""
+def lav_malzemesi(tD, tE, tN):
+    """gercekci lav: soguyan bazalt kabuk plakalari (T_Lav_D/N), aralarindaki catlaklardan parlayan erimis kaya (T_Lav_E).
+    Doku akis yonunde kayar; isima sicakliga gore koyu kirmizi -> turuncu -> sari; buyuk olcekli ikinci ornek sicakligi dalgalandirir."""
     m = Malzeme("M_Lav")
-    uv = m.carp(m.ifade(unreal.MaterialExpressionTextureCoordinate), m.skaler("Olcek", 0.35))
-    hiz = m.skaler("AkisHizi", 0.12)
-    zaman = m.carp(m.ifade(unreal.MaterialExpressionTime), hiz)
+
+    def topla(a, b, ca="", cb=""):
+        e = m.ifade(unreal.MaterialExpressionAdd)
+        bag(a, ca, e, "A")
+        bag(b, cb, e, "B")
+        return e
+    zaman = m.ifade(unreal.MaterialExpressionTime)
     kay = m.ifade(unreal.MaterialExpressionAppendVector)
     sifir = m.ifade(unreal.MaterialExpressionConstant)
     bag(sifir, "", kay, "A")
-    bag(zaman, "", kay, "B")
-    uv1 = m.ifade(unreal.MaterialExpressionAdd)
-    bag(uv, "", uv1, "A")
-    bag(kay, "", uv1, "B")
-    d1 = m.doku(tL, uv1, ST.SAMPLERTYPE_LINEAR_COLOR)
-    uv2 = m.ifade(unreal.MaterialExpressionAdd)
-    bag(m.carp(uv, m.skaler("Olcek2", 1.7)), "", uv2, "A")
-    bag(m.carp(kay, m.skaler("Hiz2", 0.6)), "", uv2, "B")
-    d2 = m.doku(tL, uv2, ST.SAMPLERTYPE_LINEAR_COLOR)
-    k = m.carp(d1, d2, "R", "R")
+    bag(m.carp(zaman, m.skaler("AkisHizi", -0.05)), "", kay, "B")
+    uv = topla(m.carp(m.ifade(unreal.MaterialExpressionTextureCoordinate), m.skaler("Olcek", 0.5)), kay)
+    d = m.doku(tD, uv, ST.SAMPLERTYPE_COLOR)
+    n = m.doku(tN, uv, ST.SAMPLERTYPE_NORMAL)
+    e = m.doku(tE, uv, ST.SAMPLERTYPE_LINEAR_COLOR)
+    uv2 = topla(m.carp(uv, m.skaler("DalgaOlcek", 0.37)), m.carp(kay, m.skaler("DalgaHiz", 0.4)))
+    e2 = m.doku(tE, uv2, ST.SAMPLERTYPE_LINEAR_COLOR)
+    sicak = m.carp(e, topla(m.carp(e2, m.skaler("Dalga", 0.8), "R"), m.skaler("DalgaTaban", 0.6)), "R")
+    renk = m.ifade(unreal.MaterialExpressionLinearInterpolate)
+    bag(m.vektor("Kirmizi", (0.6, 0.04, 0.005)), "RGB", renk, "A")
+    bag(m.vektor("Turuncu", (1.0, 0.32, 0.03)), "RGB", renk, "B")
+    bag(sicak, "", renk, "Alpha")
+    s2 = m.carp(sicak, sicak)
+    renk = topla(renk, m.carp(m.vektor("Sari", (1.0, 0.75, 0.3)), m.carp(s2, s2), "RGB"))
     nabiz = m.ifade(unreal.MaterialExpressionSine)
-    bag(m.carp(m.ifade(unreal.MaterialExpressionTime), m.skaler("NabizHizi", 0.8)), "", nabiz, "")
-    nb = m.ifade(unreal.MaterialExpressionAdd)
-    bag(m.carp(nabiz, m.skaler("Nabiz", 0.15)), "", nb, "A")
-    bag(m.skaler("NabizTaban", 1.0), "", nb, "B")
-    isik = m.carp(m.carp(m.carp(m.vektor("Renk", (1.0, 0.32, 0.05)), k, "RGB", ""), m.skaler("LavGucu", 6.0)), nb)
+    bag(m.carp(zaman, m.skaler("NabizHizi", 0.7)), "", nabiz, "")
+    nb = topla(m.carp(nabiz, m.skaler("Nabiz", 0.12)), m.skaler("NabizTaban", 1.0))
+    isik = m.carp(m.carp(m.carp(renk, s2), m.skaler("LavGucu", 12.0)), nb)
     mel.connect_material_property(isik, "", MP.MP_EMISSIVE_COLOR)
-    mel.connect_material_property(m.vektor("Kabuk", (0.03, 0.015, 0.01)), "RGB", MP.MP_BASE_COLOR)
-    p = m.ifade(unreal.MaterialExpressionConstant)
-    p.set_editor_property("r", 0.55)
-    mel.connect_material_property(p, "", MP.MP_ROUGHNESS)
+    mel.connect_material_property(d, "RGB", MP.MP_BASE_COLOR)
+    mel.connect_material_property(d, "A", MP.MP_ROUGHNESS)
+    mel.connect_material_property(n, "RGB", MP.MP_NORMAL)
     return m.bitir()
 
 
@@ -256,11 +263,12 @@ def calistir():
     log("1/3 Mesh ve dokular aktariliyor...")
     ms = meshler()
     tD, tN = doku("T_DuvarTas_D"), doku("T_DuvarTas_N", normal=True)
-    tY, tL = doku("T_Yaprak"), doku("T_LavAkis", srgb=False)
+    tY = doku("T_Yaprak")
+    tLD, tLE, tLN = doku("T_Lav_D"), doku("T_Lav_E", srgb=False), doku("T_Lav_N", normal=True)
     lav = meshler("SM_Lav.glb", "Lav")
     log("2/3 Malzemeler: M_DuvarTas, M_DuvarHarc, M_DuvarSarmasik, M_Lav")
     mis = ornekler(tas_malzemesi(tD, tN), harc_malzemesi(), sarmasik_malzemesi(tY))
-    mi_lav = ornek(lav_malzemesi(tL), "MI_Lav", {"LavGucu": 4.0}, {})
+    mi_lav = ornek(lav_malzemesi(tLD, tLE, tLN), "MI_Lav", {}, {})
     for sm in lav:
         for j in range(len(sm.get_editor_property("static_materials"))):
             sm.set_material(j, mi_lav)

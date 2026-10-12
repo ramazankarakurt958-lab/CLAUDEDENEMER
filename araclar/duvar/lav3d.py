@@ -1,6 +1,6 @@
 # Ates tribununde 3D lav akintilari: lav lekelerinin (T_ArenaBolgeMaske R) oldugu teras kenarlarindan baslayip duvar kaplamasi
 # dahil yuzeyi takip ederek asagi akan, cikintidan dokulen yuvarlak kesitli serit (akinti.py'nin yol izleme/tup kodu).
-# Cikti: SM_Lav.glb (yuva "Lav"; UV0: u = kesit, v = akis boyunca metre), T_LavAkis.png (R = kor/kabuk, akis yonunde uzamis)
+# Cikti: SM_Lav.glb (yuva "Lav"; UV0: u = kesit, v = akis boyunca metre). Dokular: lav_doku.py (T_Lav_D/E/N).
 # Kullanim: python3 lav3d.py arena_game.glb SM_Duvar.glb T_ArenaBolgeMaske.png T_ArenaKaplamaMaske.png hmap.npz
 import sys
 import numpy as np
@@ -8,7 +8,6 @@ import trimesh
 from PIL import Image
 sys.path.insert(0, __file__.rsplit("/", 2)[0] + "/bolge_doku")
 import akinti
-from mermer_doku_ortak import fbm
 
 arena = trimesh.load(sys.argv[1], force="mesh")
 m = trimesh.util.concatenate([arena, trimesh.load(sys.argv[2], force="mesh")])
@@ -83,13 +82,3 @@ t.visual = trimesh.visual.TextureVisuals(uv=np.c_[UV[:, 0], -UV[:, 1]], material
 _ = t.vertex_normals
 t.export(sys.argv[6] if len(sys.argv) > 6 else "SM_Lav.glb")
 print("lav serit", len(parca), "ucgen", len(F))
-
-# akis dokusu: akis yonunde (v) uzamis kor damarlari + koyu kabuk adalari, dikissiz
-S = 512
-a = fbm(S, 4, 4, 51)
-b = fbm(S, 10, 3, 52)
-yy, xx = np.mgrid[0:S, 0:S] / S
-damar = np.clip(1 - np.abs(np.sin((xx + a * .6) * np.pi * 6)) * 1.6, 0, 1) ** 2
-kabuk = np.clip((b - .55) * 4, 0, 1)
-k = np.clip(.35 + .9 * damar - .8 * kabuk + (a - .5) * .5, 0, 1)
-Image.fromarray((k * 255).astype(np.uint8)).save("T_LavAkis.png")

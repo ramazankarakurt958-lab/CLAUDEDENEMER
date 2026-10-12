@@ -13,3 +13,4 @@ Unreal: `Content/Maps/Arena/DuvarKaplama.py` (tek basina) ya da `ArenaHepsi.py` 
 7. `lav3d.py arena_game.glb SM_Duvar.glb T_ArenaBolgeMaske.png T_ArenaKaplamaMaske.png hmap.npz SM_Lav.glb`: ates tribununde
    lav lekelerinin oldugu kenarlardan duvar kaplamasi dahil asagi akan 3D lav seritleri + T_LavAkis.png.
 8. `agac3d.py arena_game.glb hmap.npz T_ArenaKaplamaMaske.png SM_Agac.glb`: orman tribununde duz ve ustu acik yerlere kalin koklu agaclar + T_Kabuk_D/N.
+9. `lav_doku.py`: gercekci lav dokulari T_Lav_D/E/N (Voronoi kabuk plakalari, catlaklardan parlayan erimis kaya).
