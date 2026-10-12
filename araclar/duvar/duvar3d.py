@@ -3,7 +3,8 @@
 # Her duvar kosusu icin:
 #   - kesme tas bloklar (pahli on yuz, 2.5 cm derz, sira sira kaydirilmis), arkada koyu harc yuzeyi
 #   - 3.5 m'den yuksek duvarlarda ~6 m arayla ayakli/baslikli plastirlar
-#   - ustte profilli kornis; dis halka duvarlarinda mazgalli parapet (burc disleri). Kuleler kaplanmaz (kontur.py ayiklar).
+#   - ustte profilli kornis; dis halka duvarlarinda mazgalli parapet (burc disleri)
+#   - kulelerde sadece govde: tac/havuz (genisleyen tepe) basladigi yerin altinda ince kusakla biter, tepeye dokunulmaz
 # Eski erimis yuzey nerede disari tasiyorsa kaplama o kadar one alinir (en cok 1.2 m) ki hic gorunmesin.
 # Cikti: SM_Duvar.glb -> 4 bolge x 3 yuva (Ates/Su/Orman/Hava _Blok, _Bezek, _Harc); kose rengi = blok tonu (orman: yosun,
 # ates: is, su: buz, hava: damar); Harc'ta R = kor maskesi (ates derzlerinin seyrek parlayan yerleri). UV metre cinsinden (malzemede olceklenir).
@@ -55,9 +56,9 @@ def yuva(b, ad):
     return yuvalar.setdefault(b + "_" + ad, Yuva())
 
 
-def tasma_olc(xz, n, alt, ust):
-    """eski yuzeyin kontur cizgisinden ne kadar disari tastigi (yatay isinlarla, 4 yukseklikte)"""
-    hs = np.linspace(0.15, 0.9, 4)
+def tasma_olc(xz, n, alt, ust, hs=np.linspace(0.15, 0.9, 4), ham=False):
+    """eski yuzeyin kontur cizgisinden ne kadar disari tastigi (yatay isinlarla, verilen bagil yuksekliklerde).
+    ham=True: kirpilmamis (yukseklik x nokta) matris; eksi = yuzey konturun icinde"""
     O, D = [], []
     for h in hs:
         y = alt + (ust - alt) * h
@@ -67,8 +68,8 @@ def tasma_olc(xz, n, alt, ust):
     t = np.full(len(O), 9.0)
     loc, ri, _ = arena.ray.intersects_location(O, D, multiple_hits=False)
     t[ri] = np.linalg.norm(loc - O[ri], axis=1)
-    tas = (2.5 - t).reshape(len(hs), -1).max(0)
-    return np.clip(tas, 0, 1.2)
+    T = (2.5 - t).reshape(len(hs), -1)
+    return T if ham else np.clip(T.max(0), 0, 1.2)
 
 
 class Kosu:
@@ -81,7 +82,33 @@ class Kosu:
         mod = "wrap" if self.kapali else "nearest"
         self.ayak = nd.gaussian_filter1d(nd.minimum_filter1d(k["ayak"], 5, mode=mod), 1.5, mode=mod)
         self.bosluk = float(np.mean(k["bosluk"]))
-        tas = tasma_olc(xz, n, self.ayak, self.L)
+        self.kule = bool(k.get("kule", False))
+        self.gecersiz = False
+        if self.kule:
+            # kule: gövde profilini olc, tac/havuz (genisleyen tepe) basladigi yerin altinda bit; tepeye dokunma
+            hs = np.linspace(0.05, 0.97, 14)
+            T = tasma_olc(xz, n, self.ayak, self.L, hs, ham=True)
+            T = np.where(T < -6, np.nan, T)
+            with np.errstate(all="ignore"):
+                import warnings
+                warnings.simplefilter("ignore")
+                prof = np.nanmedian(T, axis=1)
+                govde = np.nanmedian(prof[:7])
+            i = len(hs) - 1
+            while i > 0 and prof[i] > govde + .3:
+                i -= 1
+            yuk = np.min(self.ayak) + (self.L - np.min(self.ayak)) * hs
+            self.ust = min(yuk[min(i + 1, len(hs) - 1)] - .2 if i < len(hs) - 1 else self.L, self.L - .6)
+            alt_ = self.ayak[None, :] + (self.L - self.ayak[None, :]) * hs[:, None]
+            T = np.where(alt_ < self.ust - .1, T, np.nan)
+            with np.errstate(all="ignore"):
+                tas = np.nanmax(np.r_[T, np.full((1, T.shape[1]), np.nan)], axis=0)
+            tas = np.clip(np.where(np.isnan(tas), np.nanmedian(tas) if np.isfinite(tas).any() else 0.0, tas), -3, 1.2)
+            if self.ust - np.min(self.ayak) < 1.5 or not np.isfinite(govde):
+                self.gecersiz = True
+        else:
+            self.ust = self.L + KORNIS_UST - KORNIS_H
+            tas = tasma_olc(xz, n, self.ayak, self.L)
         tas = nd.gaussian_filter1d(nd.maximum_filter1d(tas, 7, mode=mod), 2.0, mode=mod) + 0.06
         self.P = xz + n * tas[:, None]
         tg = np.gradient(self.P, axis=0)                          # yon: teget x yukari = disari olsun (on yuz disa baksin)
@@ -164,7 +191,11 @@ def kutu(k, y_, s0, s1, y0, y1, d0, d1, renk, ust=True, arka=False):
 KORNIS = [(0.0, 0.0), (0.10, 0.0), (0.10, 0.07), (0.17, 0.10), (0.24, 0.20), (0.27, 0.30), (0.27, KORNIS_H), (-0.7, KORNIS_H)]
 
 
-def kornis(k, y_, yt, renk):
+# kule kusagi: tepenin altinda ince silme; ustu duvara geri doner (tepeye uzanmaz)
+KUSAK = [(0.0, 0.0), (0.09, 0.0), (0.09, 0.16), (0.0, 0.24)]
+
+
+def kornis(k, y_, yt, renk, KORNIS=KORNIS):
     ns = max(2, int(math.ceil(k.boy / 0.5)))
     ss = np.linspace(0, k.boy, ns + 1)
     v = np.r_[0, np.cumsum([math.hypot(KORNIS[i + 1][0] - KORNIS[i][0], KORNIS[i + 1][1] - KORNIS[i][1]) for i in range(len(KORNIS) - 1)])]
@@ -208,15 +239,15 @@ def plastir(k, y_, sm, alt, yt, renk):
 toplam_blok = 0
 for kd in kosular:
     k = Kosu(kd)
-    if k.boy < 3.0 or (k.kapali and k.boy < 15):
+    if k.gecersiz or k.boy < 3.0 or (k.kapali and k.boy < 6):
         continue
     b = k.bolge
     rr = np.random.default_rng(int(k.L * 100) + len(k.P))
-    yt = k.L + KORNIS_UST - KORNIS_H
+    yt = k.ust - (KUSAK[-1][1] if k.kule else 0)
     yuk = k.L - float(np.min(k.ayak))
     # plastir yerleri
     plastirlar = []
-    if yuk >= 3.5 and k.boy >= 7 and k.yaricap > 4:
+    if yuk >= 3.5 and k.boy >= 7 and k.yaricap > 4 and not k.kule:
         n = max(1, int(round(k.boy / 6.0)))
         plastirlar = [k.boy * (i + .5) / n for i in range(n)]
     # harc (koyu arka yuzey)
@@ -258,10 +289,10 @@ for kd in kosular:
         y1 = y0
         sira += 1
     bz = yuva(b, "Bezek")
-    kornis(k, bz, yt, [1, 1, 1, 1])
+    kornis(k, bz, yt, [1, 1, 1, 1], KUSAK if k.kule else KORNIS)
     for p in plastirlar:
         plastir(k, bz, p, k.taban(p), yt, [1, 1, 1, 1])
-    if k.bosluk > .6 and yuk >= 3:                               # sadece dis halka duvarlari (kuleler kaplanmaz)
+    if k.bosluk > .6 and yuk >= 3 and not k.kule:                               # sadece dis halka duvarlari (kuleler kaplanmaz)
         parapet(k, bz, yt)
 
 sahne = trimesh.Scene()

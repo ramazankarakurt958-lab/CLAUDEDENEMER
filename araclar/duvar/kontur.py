@@ -1,7 +1,7 @@
 # Arena duvarlarinin temiz konturlari: ust yukseklik haritasi (H) 0.5 m kademelerle kesilir, her kademenin sinir cizgisi
 # yumusatilir; sinirin disinda en az DUSUS metre asagi inen yerler "duvar" sayilir (sadece o duvarin en ust kademesinde).
-# Kuleler kaplanmaz: herhangi bir kademede kapali, yuvarlak ve cevresi < 70 m olan kontur "kule" sayilir, cevresindeki duvar
-# noktalari atilir. Selalelerin (SM_Selale.glb) aktigi yuzeyler de kaplanmaz.
+# Kuleler: herhangi bir kademede kapali, yuvarlak ve cevresi < 70 m olan kontur "kule" sayilir; cevresindeki kosular kule=True
+# isaretlenir (duvar3d.py kulelerin sadece govdesini kaplar, tepesine dokunmaz). Selalelerin (SM_Selale.glb) aktigi yuzeyler kaplanmaz.
 # Girdi: hmap.npz (H: ust, B: alt yukseklik, G hucre, O koken; arena glTF x-z duzlemi, metre), istege bagli SM_Selale.glb.
 # Cikti: konturlar.npy
 # Kullanim: python3 kontur.py hmap.npz [SM_Selale.glb]
@@ -69,10 +69,15 @@ if len(sys.argv) > 2:
     selale = (cKDTree(sv[:, [0, 2]]), sv[:, 1])
 
 
-def kule_ya_da_selale(x, z, alt, ust):
+def kule_mu(x, z):
     h = np.zeros(len(x), bool)
     for cx, cz, rad in kuleler:
-        h |= np.hypot(x - cx, z - cz) < rad + .9
+        h |= np.hypot(x - cx, z - cz) < rad + 1.2
+    return h
+
+
+def selale_mi(x, z, alt, ust):
+    h = np.zeros(len(x), bool)
     if selale is not None:
         agac, sy = selale
         for i, yakin in enumerate(agac.query_ball_point(np.c_[x, z], 1.6)):
@@ -121,7 +126,7 @@ for L in seviyeler:
         ayak = np.where(bosluk, np.clip(alt, L - 14, L - 2), ayak)
         duvar = ust & (L - ayak >= DUSUS) & (L - yakin >= 1.2) & ~disarida(xz[:, 0], xz[:, 1])
         if duvar.any():
-            duvar &= ~kule_ya_da_selale(xz[:, 0], xz[:, 1], ayak, L)
+            duvar &= ~selale_mi(xz[:, 0], xz[:, 1], ayak, L)
         # kucuk bosluklari kapat, kisa parcalari at
         duvar = nd.binary_closing(np.r_[duvar, duvar, duvar], np.ones(3))[len(duvar):2 * len(duvar)]
         if not duvar.any():
@@ -139,8 +144,9 @@ for L in seviyeler:
         for pr in parcalar:
             if len(pr) < 5:
                 continue
-            kosular.append(dict(L=float(L), xz=xz[pr], n=nrm[pr], ayak=ayak[pr], bosluk=bosluk[pr],
-                                kapali=kapali and len(pr) == len(xz)))
-print("duvar kosusu", len(kosular), "toplam uzunluk %.0f m" % sum(len(k["xz"]) * .5 for k in kosular),
+            kp = kapali and len(pr) == len(xz)
+            kule = (kp and len(pr) * .5 < 80) or kule_mu(xz[pr, 0], xz[pr, 1]).mean() > .7
+            kosular.append(dict(L=float(L), xz=xz[pr], n=nrm[pr], ayak=ayak[pr], bosluk=bosluk[pr], kapali=kp, kule=bool(kule)))
+print("duvar kosusu", len(kosular), "kule", sum(k["kule"] for k in kosular), "toplam uzunluk %.0f m" % sum(len(k["xz"]) * .5 for k in kosular),
       "alan %.0f m2" % sum(((k["L"] - k["ayak"]) * .5).sum() for k in kosular))
 np.save("konturlar.npy", np.array(kosular, dtype=object), allow_pickle=True)
