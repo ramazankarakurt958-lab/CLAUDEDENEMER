@@ -4,8 +4,8 @@ UE5 - Bukulen Duvar (Spline Mesh) olusturucu
 Duvar mesh'ini bir spline cizgisi boyunca dizer, her parcayi yumusakca buker
 ve arka yuzunu arenanin yan yuzune yaslar. Arenanin cizginin hangi tarafinda
 oldugunu ve duvarin cizgiden asagi mi yukari mi uzanacagini kendisi bulur.
-SNAP_TO_EDGE acikken cizgiyi kabaca cizmek yeterli: duvar arenanin gercek
-kenarini bulup onun seklini takip eder.
+SNAP_MODE = "surface" iken cizgiyi kaplanacak yuzeyin onune kabaca cizmek
+yeterli: duvar arkadaki yuzeyi bulup ona yapisir ve onun seklini takip eder.
 
 KULLANIM:
   1. Sahnede spline'li actor'u (BP_WallPath) sec.
@@ -22,8 +22,8 @@ import unreal
 WALL_MESH_PATH = "/Game/Fab/Megascans/3D/Castle_Wall_sctv3/Medium/sctv3_tier_2/StaticMeshes/sctv3_tier_2.sctv3_tier_2"
 MODE = "spline"            # "spline" = secili BP_WallPath cizgisi, "circle" = daire
 
-SNAP_TO_EDGE = True        # Cizgiyi arenanin gercek kenarina oturt (kaba cizim yeterli)
-SNAP_RANGE = 300.0         # cm: kenar cizginin en fazla bu kadar uzaginda aranir
+SNAP_MODE = "surface"      # "surface" = arkadaki yuzeye yapistir, "edge" = ust kenara oturt, "off" = cizgiyi aynen kullan
+SNAP_RANGE = 300.0         # cm: yuzey/kenar cizginin en fazla bu kadar uzaginda aranir
 SNAP_SMOOTH = 2            # Kenar cizgisini yumusatma (0 = yok, 2-4 = yumusak)
 
 AUTO_SIDE = True           # Arenanin cizginin hangi tarafinda oldugunu kendisi bulur
@@ -317,6 +317,56 @@ def snap_to_edge(world, sample, length, open_side, vertical):
     return polyline_path(smooth(points, SNAP_SMOOTH))
 
 
+def trace_point(world, start, end):
+    """start'tan end'e isin atar; ilk carpilan noktayi (Vector) ya da None dondurur."""
+    channel = getattr(unreal.TraceTypeQuery, "ECC_VISIBILITY", None) or unreal.TraceTypeQuery.TRACE_TYPE_QUERY1
+    for complex_trace in (True, False):
+        hit = unreal.SystemLibrary.line_trace_single(
+            world, start, end, channel, complex_trace, IGNORE, unreal.DrawDebugTrace.NONE, True)
+        if isinstance(hit, tuple):  # bazi surumler (bool, HitResult) dondurur
+            hit = hit[1] if hit and hit[0] else None
+        if not hit:
+            continue
+        parts = hit.to_tuple()
+        if isinstance(parts[0], bool) and not parts[0]:
+            continue
+        location = next((v for v in parts if isinstance(v, unreal.Vector)), None)
+        if location is not None:
+            return location
+    return None
+
+
+def snap_to_surface(world, sample, length, ray_dz):
+    """Cizginin iki yanina yatay isin atar, en yakin yuzeye yapisir.
+    (yeni uzunluk, sample, yuzeyin tarafi: +1 sag / -1 sol) veya None."""
+    n = max(2, int(length / SNAP_STEP) + 1)
+    found = []                     # (taraf, (x, y, z))
+    for k in range(n):
+        p, t = sample(length * k / (n - 1))
+        r = right_of(t)
+        if r is None:
+            continue
+        start = unreal.Vector(p.x, p.y, p.z + ray_dz)
+        best = None
+        for side in (1, -1):
+            hit = trace_point(world, start, start + r * (SNAP_RANGE * side))
+            if hit is not None:
+                dist = math.hypot(hit.x - p.x, hit.y - p.y)
+                if best is None or dist < best[0]:
+                    best = (dist, side, (hit.x, hit.y, p.z))
+        if best is not None:
+            found.append(best[1:])
+    votes = sum(side for side, _ in found)
+    surface_side = 1 if votes > 0 else -1
+    points = [pt for side, pt in found if side == surface_side]
+    unreal.log("Bend Wall: yuzeye yapisan nokta %d/%d, yuzey %s tarafta"
+               % (len(points), n, "sag" if surface_side == 1 else "sol"))
+    if len(points) < 2:
+        return None
+    path = polyline_path(smooth(points, SNAP_SMOOTH))
+    return None if path is None else (path[0], path[1], surface_side)
+
+
 def clear_previous(folder):
     for actor in actor_sub.get_all_level_actors():
         if isinstance(actor, unreal.SplineMeshActor) and str(actor.get_folder_path()) == folder:
@@ -337,7 +387,7 @@ def main():
     folder = "%s/%s" % (FOLDER, path_name)
     axis, mesh_len, side_min, side_max, bottom_z, top_z, roll_deg, sigma = mesh_layout(mesh)
     roll = math.radians(roll_deg)
-    snap = SNAP_TO_EDGE and MODE != "circle"
+    snap = SNAP_MODE if MODE != "circle" else "off"
 
     with unreal.ScopedEditorTransaction("Bend Wall"):
         if CLEAR_PREVIOUS:
@@ -350,26 +400,41 @@ def main():
         front = -1 if FRONT_FACE.startswith("-") else 1
         flip = FLIP
         vertical = VERTICAL_ALIGN
-        if AUTO_SIDE or vertical == "auto" or snap:
+        open_side = 0
+        if AUTO_SIDE or vertical == "auto" or snap != "off":
             open_side, drop = detect_side(world, sample, length, PROBE_SIDE)
-            if open_side == 0 and snap:
+            if open_side == 0 and snap == "edge":
                 open_side, drop = detect_side(world, sample, length, SNAP_RANGE)
-            if AUTO_SIDE:
-                if open_side == 0:
-                    unreal.log_warning("Bend Wall: arena bulunamadi (collision yok mu?). FLIP ayari kullaniliyor.")
-                else:
-                    flip = sigma * front != open_side
             if vertical == "auto":
-                vertical = "none" if drop is None else ("top" if drop > 50.0 else "bottom")
-            unreal.log("Bend Wall: bos taraf=%s, zemin farki=%s cm, flip=%s, dikey=%s"
-                       % ({1: "sag", -1: "sol", 0: "?"}[open_side], drop, flip, vertical))
-
-            if snap:
-                snapped = snap_to_edge(world, sample, length, open_side, vertical) if open_side else None
-                if snapped:
-                    length, sample = snapped
+                if drop is None:
+                    vertical = "top" if snap == "surface" else "none"
                 else:
-                    unreal.log_warning("Bend Wall: kenar bulunamadi, cizgi oldugu gibi kullaniliyor.")
+                    vertical = "top" if drop > 50.0 else "bottom"
+
+        if snap == "surface":
+            # Isinlar duvarin ortasi hizasindan atilir
+            height = top_z - bottom_z
+            ray_dz = {"top": -height / 2.0, "bottom": height / 2.0}.get(vertical, 0.0)
+            snapped = snap_to_surface(world, sample, length, ray_dz)
+            if snapped:
+                length, sample, surface_side = snapped
+                open_side = -surface_side
+            else:
+                unreal.log_warning("Bend Wall: yuzey bulunamadi, cizgi oldugu gibi kullaniliyor.")
+        elif snap == "edge":
+            snapped = snap_to_edge(world, sample, length, open_side, vertical) if open_side else None
+            if snapped:
+                length, sample = snapped
+            else:
+                unreal.log_warning("Bend Wall: kenar bulunamadi, cizgi oldugu gibi kullaniliyor.")
+
+        if AUTO_SIDE:
+            if open_side == 0:
+                unreal.log_warning("Bend Wall: arena bulunamadi (collision yok mu?). FLIP ayari kullaniliyor.")
+            else:
+                flip = sigma * front != open_side
+        unreal.log("Bend Wall: bos taraf=%s, flip=%s, dikey=%s"
+                   % ({1: "sag", -1: "sol", 0: "?"}[open_side], flip, vertical))
 
         target = SEGMENT_LENGTH if SEGMENT_LENGTH > 0 else mesh_len
         if target <= 0:
