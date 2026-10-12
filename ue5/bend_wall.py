@@ -1,27 +1,14 @@
 """
 UE5 - Bukulen Duvar (Spline Mesh) olusturucu
 
-Indirdigin duvar mesh'ini bir spline boyunca (veya bir daire etrafinda)
-art arda dizer ve her parcayi yumusakca buker.
+Duvar mesh'ini bir spline cizgisi boyunca dizer, her parcayi yumusakca buker
+ve arka yuzunu arenanin yan yuzune yaslar. Arenanin cizginin hangi tarafinda
+oldugunu ve duvarin cizgiden asagi mi yukari mi uzanacagini kendisi bulur.
 
-KURULUM (bir kere):
-  1. Edit > Plugins > "Python Editor Script Plugin" ac, editoru yeniden baslat.
-
-KULLANIM - "spline" modu (arenanin seklini sen cizersin):
-  1. Content Browser > sag tik > Blueprint Class > Actor. Adi: BP_WallPath
-     Ac, sol ustten Add > Spline ekle, Compile, Save. Sahneye surukle.
-  2. Spline noktalarini arenanin kenari boyunca yerlestir
-     (Alt + surukle = yeni nokta). Noktalar zemine otursun istersen
-     noktaya sag tik > Snap to Floor.
-  3. Sahnede BP_WallPath'i sec, Content Browser'da duvar mesh'ini sec.
-  4. Tools > Execute Python Script... > bu dosyayi sec.
-
-KULLANIM - "circle" modu (yuvarlak arena):
-  MODE = "circle" yap, CIRCLE_CENTER ve CIRCLE_RADIUS'u arenana gore gir,
-  duvar mesh'ini Content Browser'da sec ve scripti calistir.
-
-Script tekrar calistirildiginda onceki duvarlari silip yeniden olusturur.
-Ctrl+Z ile geri alinabilir.
+KULLANIM:
+  1. Sahnede spline'li actor'u (BP_WallPath) sec.
+  2. Alttaki Cmd kutusuna:  py "C:\\Users\\...\\bend_wall.py"
+Tekrar calistirinca eski duvarlar silinip yeniden olusur. Ctrl+Z geri alir.
 """
 
 import math
@@ -30,17 +17,17 @@ import unreal
 
 # ============================ AYARLAR ============================
 WALL_MESH_PATH = "/Game/Fab/Megascans/3D/Castle_Wall_sctv3/Medium/sctv3_tier_2/StaticMeshes/sctv3_tier_2.sctv3_tier_2"
-MODE = "spline"            # "spline" veya "circle"
+MODE = "spline"            # "spline" = secili BP_WallPath cizgisi, "circle" = daire
+
+AUTO_SIDE = True           # Arenanin cizginin hangi tarafinda oldugunu kendisi bulur
+FLIP = False               # Sadece AUTO_SIDE = False iken: duvar arenanin icine giriyorsa True
+FRONT_FACE = "+Y"          # Kemerli on yuz arenaya bakiyorsa "-Y" yap
+VERTICAL_ALIGN = "auto"    # "auto", "top" (duvarin ustu cizgide), "bottom" (alti cizgide), "none"
+SIDE_OFFSET = 0.0          # cm: + duvari arenadan uzaklastirir, - arenaya yaklastirir
+UP_OFFSET = 0.0            # cm: + yukari, - asagi
+
 SEGMENT_LENGTH = 0.0       # Bir parcanin boyu (cm). 0 = duvarin kendi boyu
 FORWARD_AXIS = "X"         # Duvarin uzunlugu hangi eksende: "X" veya "Y"
-FLIP = False               # Duvar arenanin icine giriyorsa True yap
-
-# Duvarin arka yuzunu spline cizgisine yaslar (kaplama gibi otursun diye)
-ALIGN_BACK = True          # True = arka yuz cizgiye oturur, False = duvarin ortasi cizgide kalir
-BACK_FACE = "-Y"           # Kemerler/on yuz arenaya bakiyorsa "+Y" yap
-VERTICAL_ALIGN = "none"    # "top" = duvarin ustu cizgide, "bottom" = alti cizgide, "none" = degistirme
-SIDE_OFFSET = 0.0          # Ince ayar (cm): duvari cizgiden disari (+) / iceri (-) it
-UP_OFFSET = 0.0            # Ince ayar (cm): duvari yukari (+) / asagi (-) it
 
 CIRCLE_CENTER = (0.0, 0.0, 0.0)   # circle modu: arenanin merkezi
 CIRCLE_RADIUS = 2000.0            # circle modu: yaricap (cm)
@@ -50,6 +37,10 @@ CIRCLE_END_DEG = 360.0            # circle modu: bitis acisi (360 = tam daire)
 FOLDER = "BendWall"        # Olusan actor'lar World Outliner'da bu klasore konur
 CLEAR_PREVIOUS = True      # Onceki calistirmadan kalan duvarlari sil
 # =================================================================
+
+PROBE_SIDE = 150.0         # Arenayi bulmak icin cizginin iki yanina bakilan mesafe (cm)
+PROBE_UP = 3000.0          # Asagi atilan isinlarin baslangic yuksekligi (cm)
+PROBE_DEPTH = 20000.0      # Asagi atilan isinlarin uzunlugu (cm)
 
 actor_sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 
@@ -78,26 +69,12 @@ def load_mesh():
     return mesh
 
 
-def mesh_length(mesh):
+def mesh_ranges(mesh):
+    """(uzunluk, yan_min, yan_max, alt_z, ust_z)"""
     box = mesh.get_bounding_box()
     if FORWARD_AXIS.upper() == "Y":
-        return box.max.y - box.min.y
-    return box.max.x - box.min.x
-
-
-def cross_section_offset(mesh):
-    """Duvari cizgiye gore yana/yukari kaydiran (yan, yukari) offset."""
-    box = mesh.get_bounding_box()
-    side_min, side_max = (box.min.x, box.max.x) if FORWARD_AXIS.upper() == "Y" else (box.min.y, box.max.y)
-    side = 0.0
-    if ALIGN_BACK:
-        side = -side_max if BACK_FACE.upper() == "+Y" else -side_min
-    up = 0.0
-    if VERTICAL_ALIGN == "top":
-        up = -box.max.z
-    elif VERTICAL_ALIGN == "bottom":
-        up = -box.min.z
-    return unreal.Vector2D(side + SIDE_OFFSET, up + UP_OFFSET)
+        return box.max.y - box.min.y, box.min.x, box.max.x, box.min.z, box.max.z
+    return box.max.x - box.min.x, box.min.y, box.max.y, box.min.z, box.max.z
 
 
 def spline_path():
@@ -138,6 +115,64 @@ def circle_path():
     return r * abs(a1 - a0), sample, tangent_len
 
 
+def editor_world():
+    try:
+        return unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    except Exception:
+        return unreal.EditorLevelLibrary.get_editor_world()
+
+
+def ground_z(world, x, y, z):
+    """(x, y) noktasinda yukaridan asagi isin atar, carptigi yuzeyin yuksekligini dondurur."""
+    start = unreal.Vector(x, y, z + PROBE_UP)
+    end = unreal.Vector(x, y, z - PROBE_DEPTH)
+    hit = unreal.SystemLibrary.line_trace_single(
+        world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [],
+        unreal.DrawDebugTrace.NONE, True)
+    if not hit:
+        return None
+    try:
+        distance = unreal.GameplayStatics.break_hit_result(hit)[3]
+    except Exception:
+        distance = hit.to_tuple()[2]
+    return start.z - distance
+
+
+def right_of(direction):
+    """Cizgi yonune gore yatay sag vektor (spline mesh'in +Y yonu)."""
+    r = unreal.Vector(-direction.y, direction.x, 0.0)
+    size = math.sqrt(r.x * r.x + r.y * r.y)
+    return None if size < 1e-4 else r * (1.0 / size)
+
+
+def detect_side(sample, length):
+    """Cizginin hangi yani bos (alcak): +1 = sag, -1 = sol, 0 = bulunamadi.
+    Ayrica bos taraftaki zeminin cizgiden ne kadar asagida oldugu (cm)."""
+    world = editor_world()
+    votes = 0
+    drops = []
+    n = 16
+    for k in range(n):
+        p, t = sample(length * (k + 0.5) / n)
+        r = right_of(t)
+        if r is None:
+            continue
+        zr = ground_z(world, p.x + r.x * PROBE_SIDE, p.y + r.y * PROBE_SIDE, p.z)
+        zl = ground_z(world, p.x - r.x * PROBE_SIDE, p.y - r.y * PROBE_SIDE, p.z)
+        low = -1.0e9
+        hr = zr if zr is not None else low
+        hl = zl if zl is not None else low
+        if abs(hr - hl) < 20.0:
+            continue
+        open_side = 1 if hr < hl else -1
+        votes += open_side
+        lower = min(hr, hl)
+        drops.append(p.z - lower if lower > low else PROBE_DEPTH)
+    drops.sort()
+    drop = drops[len(drops) // 2] if drops else None
+    return (1 if votes > 0 else -1 if votes < 0 else 0), drop
+
+
 def clear_previous():
     for actor in actor_sub.get_all_level_actors():
         if isinstance(actor, unreal.SplineMeshActor) and str(actor.get_folder_path()) == FOLDER:
@@ -150,30 +185,51 @@ def main():
     try:
         if mesh.get_editor_property("nanite_settings").get_editor_property("enabled"):
             unreal.log_warning("Mesh Nanite acik. Bukulme gorunmezse mesh'te Nanite'i kapat "
-                               "veya konsola 'r.Nanite.AllowSplineMeshes 1' yaz.")
+                               "veya Project Settings > Nanite > Allow Nanite on Spline Meshes ac.")
     except Exception:
         pass
 
     length, sample, tangent_len = circle_path() if MODE == "circle" else spline_path()
+    mesh_len, side_min, side_max, bottom_z, top_z = mesh_ranges(mesh)
 
-    target = SEGMENT_LENGTH if SEGMENT_LENGTH > 0 else mesh_length(mesh)
+    target = SEGMENT_LENGTH if SEGMENT_LENGTH > 0 else mesh_len
     if target <= 0:
         raise RuntimeError("Mesh uzunlugu 0 cikti; FORWARD_AXIS ayarini kontrol et.")
     count = max(1, round(length / target))
     seg = length / count  # parcalar yolu tam doldursun diye hafifce esnetilir
     tan_len = tangent_len(seg)
     axis = unreal.SplineMeshAxis.Y if FORWARD_AXIS.upper() == "Y" else unreal.SplineMeshAxis.X
-    offset = cross_section_offset(mesh)
-
-    def point(d):
-        if FLIP:
-            loc, direction = sample(length - d)
-            return loc, direction * -1.0
-        return sample(d)
 
     with unreal.ScopedEditorTransaction("Bend Wall"):
         if CLEAR_PREVIOUS:
             clear_previous()
+
+        # Kemerli on yuz bos tarafa, arka yuz arenaya baksin
+        front = 1 if FRONT_FACE.upper() == "+Y" else -1
+        flip = FLIP
+        vertical = VERTICAL_ALIGN
+        if AUTO_SIDE or vertical == "auto":
+            open_side, drop = detect_side(sample, length)
+            if AUTO_SIDE:
+                if open_side == 0:
+                    unreal.log_warning("Bend Wall: arena bulunamadi (collision yok mu?). FLIP ayari kullaniliyor.")
+                else:
+                    flip = front != open_side
+            if vertical == "auto":
+                vertical = "none" if drop is None else ("top" if drop > 50.0 else "bottom")
+            unreal.log("Bend Wall: bos taraf=%s, zemin farki=%s cm, flip=%s, dikey=%s"
+                       % ({1: "sag", -1: "sol", 0: "?"}[open_side], drop, flip, vertical))
+
+        side = -side_min if front == 1 else -side_max   # arka yuz cizgiye oturur
+        side += SIDE_OFFSET * front
+        up = {"top": -top_z, "bottom": -bottom_z}.get(vertical, 0.0) + UP_OFFSET
+        offset = unreal.Vector2D(side, up)
+
+        def point(d):
+            if flip:
+                loc, direction = sample(length - d)
+                return loc, direction * -1.0
+            return sample(d)
 
         for i in range(count):
             p0, t0 = point(i * seg)
