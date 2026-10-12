@@ -33,7 +33,14 @@ WALL_MESH_PATH = "/Game/Fab/Megascans/3D/Castle_Wall_sctv3/Medium/sctv3_tier_2/S
 MODE = "spline"            # "spline" veya "circle"
 SEGMENT_LENGTH = 0.0       # Bir parcanin boyu (cm). 0 = duvarin kendi boyu
 FORWARD_AXIS = "X"         # Duvarin uzunlugu hangi eksende: "X" veya "Y"
-FLIP = False               # Duvarin on yuzu ters tarafa bakiyorsa True yap
+FLIP = False               # Duvar arenanin icine giriyorsa True yap
+
+# Duvarin arka yuzunu spline cizgisine yaslar (kaplama gibi otursun diye)
+ALIGN_BACK = True          # True = arka yuz cizgiye oturur, False = duvarin ortasi cizgide kalir
+BACK_FACE = "-Y"           # Kemerler/on yuz arenaya bakiyorsa "+Y" yap
+VERTICAL_ALIGN = "none"    # "top" = duvarin ustu cizgide, "bottom" = alti cizgide, "none" = degistirme
+SIDE_OFFSET = 0.0          # Ince ayar (cm): duvari cizgiden disari (+) / iceri (-) it
+UP_OFFSET = 0.0            # Ince ayar (cm): duvari yukari (+) / asagi (-) it
 
 CIRCLE_CENTER = (0.0, 0.0, 0.0)   # circle modu: arenanin merkezi
 CIRCLE_RADIUS = 2000.0            # circle modu: yaricap (cm)
@@ -76,6 +83,21 @@ def mesh_length(mesh):
     if FORWARD_AXIS.upper() == "Y":
         return box.max.y - box.min.y
     return box.max.x - box.min.x
+
+
+def cross_section_offset(mesh):
+    """Duvari cizgiye gore yana/yukari kaydiran (yan, yukari) offset."""
+    box = mesh.get_bounding_box()
+    side_min, side_max = (box.min.x, box.max.x) if FORWARD_AXIS.upper() == "Y" else (box.min.y, box.max.y)
+    side = 0.0
+    if ALIGN_BACK:
+        side = -side_max if BACK_FACE.upper() == "+Y" else -side_min
+    up = 0.0
+    if VERTICAL_ALIGN == "top":
+        up = -box.max.z
+    elif VERTICAL_ALIGN == "bottom":
+        up = -box.min.z
+    return unreal.Vector2D(side + SIDE_OFFSET, up + UP_OFFSET)
 
 
 def spline_path():
@@ -141,6 +163,7 @@ def main():
     seg = length / count  # parcalar yolu tam doldursun diye hafifce esnetilir
     tan_len = tangent_len(seg)
     axis = unreal.SplineMeshAxis.Y if FORWARD_AXIS.upper() == "Y" else unreal.SplineMeshAxis.X
+    offset = cross_section_offset(mesh)
 
     def point(d):
         if FLIP:
@@ -163,6 +186,8 @@ def main():
             comp = actor.get_component_by_class(unreal.SplineMeshComponent)
             comp.set_static_mesh(mesh)
             comp.set_forward_axis(axis, False)
+            comp.set_start_offset(offset, False)
+            comp.set_end_offset(offset, False)
             # Actor p0'da ve donmesiz duruyor, bu yuzden konumlar p0'a gore yerel
             comp.set_start_and_end(unreal.Vector(0.0, 0.0, 0.0), t0 * tan_len,
                                    p1 - p0, t1 * tan_len, True)
