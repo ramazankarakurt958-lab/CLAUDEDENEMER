@@ -4,6 +4,7 @@
 #   - kesme tas bloklar (pahli on yuz, 2.5 cm derz, sira sira kaydirilmis), arkada koyu harc yuzeyi
 #   - 3.5 m'den yuksek duvarlarda ~6 m arayla ayakli/baslikli plastirlar
 #   - ustte profilli kornis; dis halka duvarlarinda mazgalli parapet (burc disleri)
+#   - orman duvarlarinda kornisten sarkan sarmasiklar (yuva Orman_Sarmasik, T_Yaprak atlasi)
 #   - kulelerde sadece govde: tac/havuz (genisleyen tepe) basladigi yerin altinda ince kusakla biter, tepeye dokunulmaz
 # Eski erimis yuzey nerede disari tasiyorsa kaplama o kadar one alinir (en cok 1.2 m) ki hic gorunmesin.
 # Cikti: SM_Duvar.glb -> 4 bolge x 3 yuva (Ates/Su/Orman/Hava _Blok, _Bezek, _Harc); kose rengi = blok tonu (orman: yosun,
@@ -236,6 +237,27 @@ def plastir(k, y_, sm, alt, yt, renk):
     kutu(k, y_, sm - .5, sm + .5, yt - .4, yt, 0, .42, renk)                     # baslik
 
 
+def sarmasik(k, y_, ust, rr):
+    """kornisten sarkan sarmasik: yaprak kartlari zinciri (UV: T_Yaprak 2x2 atlasindan rastgele hucre, iki yuzlu malzeme)"""
+    for s0 in np.arange(rr.uniform(.2, .6), k.boy - .3, .8):
+        if rr.random() > .7:
+            continue
+        boy = rr.uniform(1.2, max(1.3, min(5.5, ust - k.taban(s0) - .3)))
+        faz, y = rr.uniform(0, 6.3), ust + .15
+        while y > ust - boy:
+            sx = s0 + .14 * math.sin(y * 2.3 + faz)
+            d = .14 + rr.uniform(0, .06)
+            w = rr.uniform(.32, .48) * (.6 + .4 * (y - (ust - boy)) / boy)
+            hx, hy = (rr.integers(0, 2) * .5, rr.integers(0, 2) * .5)
+            renk = [rr.uniform(.75, 1.1)] * 3 + [1]
+            ac = rr.uniform(-.5, .5)
+            ds = w * math.cos(ac) / 2
+            dd = w * math.sin(ac) / 2
+            y_.dortgen([k.nokta(sx - ds, y - w, d - dd), k.nokta(sx + ds, y - w, d + dd), k.nokta(sx + ds, y, d + dd + .05),
+                        k.nokta(sx - ds, y, d - dd + .05)], [[hx, hy + .5], [hx + .5, hy + .5], [hx + .5, hy], [hx, hy]], renk)
+            y -= w * rr.uniform(.45, .7)
+
+
 toplam_blok = 0
 for kd in kosular:
     k = Kosu(kd)
@@ -292,6 +314,8 @@ for kd in kosular:
     kornis(k, bz, yt, [1, 1, 1, 1], KUSAK if k.kule else KORNIS)
     for p in plastirlar:
         plastir(k, bz, p, k.taban(p), yt, [1, 1, 1, 1])
+    if b == "Orman" and not k.kule:
+        sarmasik(k, yuva(b, "Sarmasik"), yt + KORNIS_H, rr)
     if k.bosluk > .6 and yuk >= 3 and not k.kule:                               # sadece dis halka duvarlari (kuleler kaplanmaz)
         parapet(k, bz, yt)
 

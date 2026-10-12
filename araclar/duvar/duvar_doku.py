@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from PIL import Image
 from scipy import ndimage as nd
-sys.path.insert(0, "../bolge_doku")
+sys.path.insert(0, __file__.rsplit("/", 2)[0] + "/bolge_doku")
 from mermer_doku_ortak import fbm
 
 S = 1024
@@ -27,3 +27,26 @@ n = np.dstack([-gx, gy, np.ones_like(h)])
 n /= np.linalg.norm(n, axis=2, keepdims=True)
 Image.fromarray(((n * .5 + .5) * 255).astype(np.uint8)).save("T_DuvarTas_N.png")
 print("T_DuvarTas_D.png T_DuvarTas_N.png")
+
+# T_Yaprak.png: 2x2 sarmasik yapragi atlasi (RGB renk, A = maske), 512 px
+Y = 512
+yap = np.zeros((Y, Y, 4))
+rr = np.random.default_rng(9)
+for hy in range(2):
+    for hx in range(2):
+        for _ in range(7):                                          # hucre basina yaprak kumesi
+            cx, cy = rr.uniform(.25, .75) * 256 + hx * 256, rr.uniform(.25, .75) * 256 + hy * 256
+            a = rr.uniform(0, np.pi)
+            ry, rx = rr.uniform(35, 60), rr.uniform(18, 30)
+            yy, xx = np.mgrid[0:Y, 0:Y]
+            u = ((xx - cx) * np.cos(a) + (yy - cy) * np.sin(a)) / ry
+            v = (-(xx - cx) * np.sin(a) + (yy - cy) * np.cos(a)) / rx
+            ic = (u ** 2 + v ** 2 * (1 + .6 * u)) < 1
+            ic &= (xx // 256 == hx) & (yy // 256 == hy)
+            ton = rr.uniform(.7, 1.1)
+            damar = np.exp(-(v * 8) ** 2) * .25
+            c = np.dstack([.16 * ton + damar * .1, .38 * ton + damar * .2, .1 * ton + damar * .05])
+            yap[ic, :3] = c[ic] * (.8 + .3 * (1 - np.abs(u[ic])))[:, None]
+            yap[ic, 3] = 1
+Image.fromarray((np.clip(yap, 0, 1) * 255).astype(np.uint8), "RGBA").save("T_Yaprak.png")
+print("T_Yaprak.png")
