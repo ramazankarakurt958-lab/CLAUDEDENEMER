@@ -29,7 +29,7 @@ import math
 import unreal
 
 # ============================ AYARLAR ============================
-WALL_MESH_PATH = ""        # Bos = Content Browser'da secili mesh. Ya da: "/Game/Walls/SM_Wall"
+WALL_MESH_PATH = "/Game/Fab/Megascans/3D/Castle_Wall_sctv3/Medium/sctv3_tier_2/StaticMeshes/sctv3_tier_2.sctv3_tier_2"
 MODE = "spline"            # "spline" veya "circle"
 SEGMENT_LENGTH = 0.0       # Bir parcanin boyu (cm). 0 = duvarin kendi boyu
 FORWARD_AXIS = "X"         # Duvarin uzunlugu hangi eksende: "X" veya "Y"
