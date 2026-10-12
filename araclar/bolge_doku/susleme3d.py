@@ -4,7 +4,7 @@
 #   SM_BulutDeniz.glb: arenanin altinda katmanli bulut denizi (uc halka katman, ortasi acik degil; UV dunya olcekli)
 # Dokular: T_Ruzgar.png (serit cizgileri, A = opaklik), T_Sancak.png (4 sancak yan yana: ates, su, orman, hava),
 #          T_Bulut.png (dikissiz bulut gurultusu, gri = yogunluk).
-# Kullanim: python3 susleme3d.py game.glb
+# Kullanim: python3 susleme3d.py game.glb [SM_Duvar.glb]
 import math
 import sys
 import numpy as np
@@ -15,6 +15,8 @@ from mermer_doku_ortak import fbm
 
 MERKEZ = np.array([-0.886, -0.281])
 m = trimesh.load(sys.argv[1] if len(sys.argv) > 1 else "game.glb", force="mesh")
+if len(sys.argv) > 2:                    # duvar kaplamasi (SM_Duvar.glb) varsa sancaklar onun yuzune asilir
+    m = trimesh.util.concatenate([m, trimesh.load(sys.argv[2], force="mesh")])
 rng = np.random.default_rng(5)
 
 
