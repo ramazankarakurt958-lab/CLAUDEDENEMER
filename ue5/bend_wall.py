@@ -56,9 +56,18 @@ def load_mesh():
     else:
         selected = unreal.EditorUtilityLibrary.get_selected_assets()
         mesh = next((a for a in selected if isinstance(a, unreal.StaticMesh)), None)
+        if mesh is None:
+            # Content Browser secimi yoksa: sahnede secili duvar actor'unun mesh'ini al
+            for actor in actor_sub.get_selected_level_actors():
+                comp = actor.get_component_by_class(unreal.StaticMeshComponent)
+                if comp and not isinstance(comp, unreal.SplineMeshComponent) and comp.static_mesh:
+                    mesh = comp.static_mesh
+                    break
     if not isinstance(mesh, unreal.StaticMesh):
-        raise RuntimeError("Duvar mesh'i bulunamadi: Content Browser'da bir Static Mesh sec "
-                           "veya WALL_MESH_PATH'i doldur.")
+        found = ", ".join("%s (%s)" % (a.get_name(), a.get_class().get_name())
+                          for a in unreal.EditorUtilityLibrary.get_selected_assets()) or "hicbir sey"
+        raise RuntimeError("Duvar mesh'i bulunamadi. Content Browser'da secili: %s. "
+                           "Bir Static Mesh sec veya WALL_MESH_PATH'i doldur." % found)
     return mesh
 
 
