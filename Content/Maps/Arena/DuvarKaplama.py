@@ -82,20 +82,6 @@ def meshler():
     return sonuc
 
 
-def mesh_hazirla(mesh):
-    """carpisma yok (top gorunmez duvarlarla sinirli, oyuncular sahada); Nanite acik (100 bin+ ucgen)"""
-    try:
-        unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem).remove_collisions(mesh)
-    except Exception as e:
-        log("   basit carpisma silinemedi (%s): %s" % (mesh.get_name(), e))
-    try:
-        ns = mesh.get_editor_property("nanite_settings")
-        ns.set_editor_property("enabled", True)
-        mesh.set_editor_property("nanite_settings", ns)
-    except Exception as e:
-        log("   Nanite acilamadi (onemsiz) (%s): %s" % (mesh.get_name(), e))
-
-
 class Malzeme:
     def __init__(self, ad):
         yol = HEDEF + "/" + ad
@@ -232,7 +218,6 @@ def calistir():
                 sm.set_material(j, mi)
             else:
                 eksik.append(ad)
-        mesh_hazirla(sm)
         eal.save_loaded_asset(sm)
         a = eas.spawn_actor_from_object(sm, arena.get_actor_location())
         a.set_actor_label("%s%s" % (ETIKET, sm.get_name()))

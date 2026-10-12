@@ -8,8 +8,9 @@
 #   7 Kademeli kalite (oyun kasmasin)                      KaliteKademe.py
 # Dosyalari GitHub'dan indirir (ayni boyutta olanlari tekrar indirmez), sonra adimlari calistirir. Bir adim hata verirse
 # digerleri devam eder; sonda ozet yazar. ElementSahasi.py projende varsa uzerine yazilmaz (saha ayarlarin korunur).
-# Coker ise: her adim bitince kaydedilir ve Kaynak/hepsi_ilerleme.txt'ye yazilir; ayni komutu tekrar calistirinca biten
-# adimlar atlanir, kalan yerden devam eder (cokme aninda calisan adim log'un basinda yazar). Bastan kurmak icin BASTAN = True.
+# HER CALISTIRMADA TEK ADIM yapar (adimlar arasinda Unreal ice aktarma/derlemeyi bitirsin, cokmesin); ayni komutu tekrar
+# calistirinca siradaki adima gecer. Ilerleme Kaynak/hepsi_ilerleme.txt'de; bir adim sirasinda cokerse log'un basinda
+# hangisi oldugu yazar ve o adim tekrar denenir. Bastan kurmak icin BASTAN = True.
 # Projede zaten kurulu olan adimlar (1-4) varsayilan olarak kapali; yeniden kurmak icin ADIMLAR'da True yap.
 # Calistirma: GitHub'daki tek satirlik komut (R degiskenini o tanimlar).
 import os
@@ -85,13 +86,18 @@ def calistir():
         log("ONCEKI CALISMA '%s' sirasinda kesildi/coktu - o adimdan devam ediliyor." % yarim)
     if not biten and not yarim:
         ilerleme_yaz("", yeni=True)
+    yapildi = False
     for betik, acik, kaynaklar in ADIMLAR:
         if not acik:
             sonuc.append((betik, "kapali"))
             continue
         if betik in biten:
-            sonuc.append((betik, "zaten bitti (atlandi)"))
+            sonuc.append((betik, "bitti"))
             continue
+        if yapildi:
+            sonuc.append((betik, "sirada"))
+            continue
+        yapildi = True
         log("=== %s ===" % betik)
         ilerleme_yaz("basla " + betik)
         try:
@@ -106,7 +112,6 @@ def calistir():
             exec(open(C + betik, encoding="utf-8").read(), {"__name__": "__main__", "__file__": C + betik})
             sonuc.append((betik, "tamam (%d sn)" % (time.time() - t)))
             ilerleme_yaz("bitti " + betik)
-            unreal.SystemLibrary.collect_garbage()
         except Exception as e:
             unreal.log_error("[Hepsi] %s HATA: %s" % (betik, e))
             unreal.log_error(traceback.format_exc())
@@ -114,10 +119,12 @@ def calistir():
     log("================ OZET (%d sn) ================" % (time.time() - t0))
     for b, s in sonuc:
         log("   %-20s %s" % (b, s))
-    if all(s.startswith(("tamam", "kapali", "zaten")) for _, s in sonuc):
-        log("TAMAM - secili adimlar bitti. Simdi Play ile dene.")
+    if any(s.startswith("HATA") for _, s in sonuc):
+        log("Bu adim hata verdi - yukaridaki HATA satirlarini gonder.")
+    elif any(s == "sirada" for _, s in sonuc):
+        log("DEVAM - ayni komutu bir kez daha calistir (siradaki adim).")
     else:
-        log("Bazi adimlar hata verdi - yukaridaki HATA satirlarini gonder.")
+        log("TAMAM - butun adimlar bitti. Simdi Play ile dene.")
 
 
 calistir()
