@@ -19,9 +19,9 @@ HEDEF = "/Game/Maps/Arena/Duvar"
 ETIKET = "DK_"
 KALDIR = False
 # bolge tonlari (dogrusal renk): Blok, Bezek (kornis/plastir/parapet) ve harc; ates derzlerinde kor
-TON = {"Ates": (0.30, 0.26, 0.24), "Su": (0.78, 0.92, 1.15), "Orman": (0.72, 0.72, 0.64), "Hava": (1.45, 1.40, 1.28)}
+TON = {"Ates": (0.55, 0.48, 0.44), "Su": (0.78, 0.92, 1.15), "Orman": (0.72, 0.72, 0.64), "Hava": (1.45, 1.40, 1.28)}
 BEZEK_ACIK = 1.12
-KOR = {"Ates": 3.0}
+KOR = {}                 # derz koru: {"Ates": 0.5} gibi (yuksek degerler duvarda parlak seritler yapar)
 
 eal = unreal.EditorAssetLibrary
 mel = unreal.MaterialEditingLibrary
@@ -260,7 +260,7 @@ def calistir():
     lav = meshler("SM_Lav.glb", "Lav")
     log("2/3 Malzemeler: M_DuvarTas, M_DuvarHarc, M_DuvarSarmasik, M_Lav")
     mis = ornekler(tas_malzemesi(tD, tN), harc_malzemesi(), sarmasik_malzemesi(tY))
-    mi_lav = ornek(lav_malzemesi(tL), "MI_Lav", {}, {})
+    mi_lav = ornek(lav_malzemesi(tL), "MI_Lav", {"LavGucu": 4.0}, {})
     for sm in lav:
         for j in range(len(sm.get_editor_property("static_materials"))):
             sm.set_material(j, mi_lav)

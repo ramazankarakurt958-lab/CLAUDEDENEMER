@@ -101,10 +101,10 @@ def doku_aktar(dosya, normal=False):
 
 # Malzeme ornekleri: ayni ana malzeme, uc katman (onizlemede kullanilan degerler)
 KATMANLAR = {
-    "Govde":    dict(Parlaklik=0.2, Opaklik=1.0, AkisHizi=1.0, KopukEsik=0.58, KopukEk=0.0, KenarYumusak=0.6, OlcekU=0.45, OlcekV=0.06, TabanOpak=0.6),
-    "Serpinti": dict(Parlaklik=0.45, Opaklik=0.3, AkisHizi=1.6, KopukEsik=0.35, KopukEk=0.5, KenarYumusak=1.5, OlcekU=0.7, OlcekV=0.09, TabanOpak=0.0),
-    "Akinti":   dict(Parlaklik=0.15, Opaklik=0.4, AkisHizi=0.8, KopukEsik=0.6, KopukEk=0.0, KenarYumusak=0.3, OlcekU=0.8, OlcekV=0.15, TabanOpak=0.1),
-    "Sis":      dict(Parlaklik=0.55, Opaklik=0.2, AkisHizi=0.08, KopukEsik=0.0, KopukEk=1.0, KenarYumusak=3.0, OlcekU=0.5, OlcekV=0.5, TabanOpak=0.35),
+    "Govde":    dict(Parlaklik=0.08, Opaklik=0.85, AkisHizi=1.0, KopukEsik=0.7, KopukEk=0.0, KenarYumusak=0.6, OlcekU=0.45, OlcekV=0.06, TabanOpak=0.6),
+    "Serpinti": dict(Parlaklik=0.1, Opaklik=0.15, AkisHizi=1.6, KopukEsik=0.35, KopukEk=0.5, KenarYumusak=1.5, OlcekU=0.7, OlcekV=0.09, TabanOpak=0.0),
+    "Akinti":   dict(Parlaklik=0.05, Opaklik=0.25, AkisHizi=0.8, KopukEsik=0.6, KopukEk=0.0, KenarYumusak=0.3, OlcekU=0.8, OlcekV=0.15, TabanOpak=0.1),
+    "Sis":      dict(Parlaklik=0.1, Opaklik=0.07, AkisHizi=0.08, KopukEsik=0.0, KopukEk=1.0, KenarYumusak=3.0, OlcekU=0.5, OlcekV=0.5, TabanOpak=0.35),
 }
 
 
@@ -195,13 +195,14 @@ def malzeme(akis, nrm):
               skaler("KopukEk", 0.0, -450, -150), -300, -250)
     kop = tek(sat, kop, -150, -250)
     renk = ifade(unreal.MaterialExpressionLinearInterpolate, 0, -450)
-    bag(vektor("RenkSu", 0.05, 0.25, 0.62, -200, -600), "", renk, "A")
-    bag(vektor("RenkKopuk", 0.9, 0.97, 1.0, -200, -450), "", renk, "B")
+    bag(vektor("RenkSu", 0.04, 0.2, 0.5, -200, -600), "", renk, "A")
+    bag(vektor("RenkKopuk", 0.62, 0.75, 0.85, -200, -450), "", renk, "B")
     bag(kop, "", renk, "Alpha")
     mel.connect_material_property(renk, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(iki(M, renk, skaler("Parlaklik", 0.2, 0, -300), 200, -350), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    mel.connect_material_property(sabit(0.12, 200, -200), "", unreal.MaterialProperty.MP_ROUGHNESS)
-    mel.connect_material_property(sabit(0.6, 200, -130), "", unreal.MaterialProperty.MP_SPECULAR)
+    # beyaz gokyuzunu ayna gibi yansitip bembeyaz gorunmesin diye orta puruzluluk, dusuk yansima
+    mel.connect_material_property(skaler("Puruz", 0.3, 200, -200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(skaler("Yansima", 0.25, 200, -130), "", unreal.MaterialProperty.MP_SPECULAR)
     # Akan dalga normali (gucu %60)
     tN = doku(nrm, uvA, -1200, 250, ST.SAMPLERTYPE_NORMAL)
     duz = ifade(unreal.MaterialExpressionConstant3Vector, -1000, 400)

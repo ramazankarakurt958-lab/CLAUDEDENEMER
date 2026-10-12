@@ -3,8 +3,10 @@
 # birebir ayni sekilde calisir: dosyalari duz indirir, betigi Output Log'un kendi Python ortaminda calistirir.
 #   1-4 ArenaBolgeDoku, Selaleler, MerkezPlatform, ElementSahasi  (projende zaten kurulu: sadece HEPSI=True ile)
 #   5   DuvarKaplama  (3D tas duvarlar, kule govdeleri, orman sarmasiklari, ates tribunu lav akintilari)
-#   6   ArenaSusleme  (mesale atesi, ruzgar, sancaklar, bulut denizi, ates tribunu efektleri)
-#   7   KaliteKademe  (oyun kasmasin)
+#   6   OrmanAgac     (orman tribunu agaclari, kalin kokler)
+#   7   ArenaSusleme  (mesale atesi, ruzgar, sancaklar, bulut denizi, ates tribunu efektleri)
+#   8   KaliteKademe  (oyun kasmasin)
+#   9   Gorunum       (malzeme ince ayarlari: ates derz koru kapali, selale kopugu seffaf)
 # Ilerleme Kaynak/hepsi_ilerleme.txt'de. Bir adim yarida kalirsa (cokme) tekrar calistirinca ayni adimi yeniden dener.
 # Bastan kurmak icin komutun basina BASTAN=True; ekle.
 import os
@@ -23,9 +25,11 @@ _HADIMLAR = [
     ("MerkezPlatform.py", _HHEPSI, ["SM_MerkezZemin.glb", "SM_MerkezRun.glb", "T_Merkez_D.jpg", "T_Merkez_N.png"]),
     ("ElementSahasi.py", _HHEPSI, ["SM_GotikSutun.glb"]),
     ("DuvarKaplama.py", True, ["SM_Duvar.glb", "T_DuvarTas_D.png", "T_DuvarTas_N.png", "T_Yaprak.png", "SM_Lav.glb", "T_LavAkis.png"]),
+    ("OrmanAgac.py", True, ["SM_Agac.glb", "T_Kabuk_D.png", "T_Kabuk_N.png", "T_Yaprak.png"]),
     ("ArenaSusleme.py", True, ["SM_EksenIsaret.glb", "SM_Mesale.glb", "SM_Alev.glb", "SM_Ruzgar.glb", "SM_Sancak.glb",
                                "SM_BulutDeniz.glb", "T_Alev.png", "T_Ruzgar.png", "T_Sancak.png", "T_Bulut.png"]),
     ("KaliteKademe.py", True, []),
+    ("Gorunum.py", True, []),
 ]
 _HIL = _HC + "Kaynak/hepsi_ilerleme.txt"
 
