@@ -21,13 +21,14 @@ MODE = "spline"            # "spline" = secili BP_WallPath cizgisi, "circle" = d
 
 AUTO_SIDE = True           # Arenanin cizginin hangi tarafinda oldugunu kendisi bulur
 FLIP = False               # Sadece AUTO_SIDE = False iken: duvar arenanin icine giriyorsa True
-FRONT_FACE = "+Y"          # Kemerli on yuz arenaya bakiyorsa "-Y" yap
+FRONT_FACE = "+"           # Kemerli on yuz arenaya bakiyorsa "-" yap
 VERTICAL_ALIGN = "auto"    # "auto", "top" (duvarin ustu cizgide), "bottom" (alti cizgide), "none"
 SIDE_OFFSET = 0.0          # cm: + duvari arenadan uzaklastirir, - arenaya yaklastirir
 UP_OFFSET = 0.0            # cm: + yukari, - asagi
 
 SEGMENT_LENGTH = 0.0       # Bir parcanin boyu (cm). 0 = duvarin kendi boyu
-FORWARD_AXIS = "X"         # Duvarin uzunlugu hangi eksende: "X" veya "Y"
+FORWARD_AXIS = "auto"      # Duvarin uzunlugu hangi eksende: "auto", "X" veya "Y"
+ROLL_DEG = "auto"          # Duvar yatik/ters duruyorsa: 0, 90, -90 veya 180 dene
 
 CIRCLE_CENTER = (0.0, 0.0, 0.0)   # circle modu: arenanin merkezi
 CIRCLE_RADIUS = 2000.0            # circle modu: yaricap (cm)
@@ -69,12 +70,27 @@ def load_mesh():
     return mesh
 
 
-def mesh_ranges(mesh):
-    """(uzunluk, yan_min, yan_max, alt_z, ust_z)"""
+def mesh_layout(mesh):
+    """Duvarin uzunluk eksenini secer.
+    (eksen, uzunluk, yan_min, yan_max, alt_z, ust_z, roll_derece, yan_isaret)
+    yan_isaret: mesh'in yan ekseni dunyada cizginin sagina (+1) mi soluna (-1) mi gidiyor."""
     box = mesh.get_bounding_box()
-    if FORWARD_AXIS.upper() == "Y":
-        return box.max.y - box.min.y, box.min.x, box.max.x, box.min.z, box.max.z
-    return box.max.x - box.min.x, box.min.y, box.max.y, box.min.z, box.max.z
+    size_x = box.max.x - box.min.x
+    size_y = box.max.y - box.min.y
+    forward = FORWARD_AXIS.upper()
+    if forward not in ("X", "Y"):
+        forward = "X" if size_x >= size_y else "Y"
+    unreal.log("Bend Wall: mesh boyutu X=%.0f Y=%.0f Z=%.0f cm, uzunluk ekseni=%s"
+               % (size_x, size_y, box.max.z - box.min.z, forward))
+    if forward == "Y":
+        # Spline mesh Y ileri iken mesh'in Z'si yana duser; -90 roll duvari dik tutar
+        # ve mesh'in X ekseni cizginin soluna bakar.
+        roll = -90.0 if ROLL_DEG == "auto" else float(ROLL_DEG)
+        return (unreal.SplineMeshAxis.Y, size_y, box.min.x, box.max.x,
+                box.min.z, box.max.z, roll, -1)
+    roll = 0.0 if ROLL_DEG == "auto" else float(ROLL_DEG)
+    return (unreal.SplineMeshAxis.X, size_x, box.min.y, box.max.y,
+            box.min.z, box.max.z, roll, 1)
 
 
 def spline_path():
@@ -126,16 +142,21 @@ def ground_z(world, x, y, z):
     """(x, y) noktasinda yukaridan asagi isin atar, carptigi yuzeyin yuksekligini dondurur."""
     start = unreal.Vector(x, y, z + PROBE_UP)
     end = unreal.Vector(x, y, z - PROBE_DEPTH)
-    hit = unreal.SystemLibrary.line_trace_single(
-        world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [],
-        unreal.DrawDebugTrace.NONE, True)
-    if not hit:
-        return None
-    try:
-        distance = unreal.GameplayStatics.break_hit_result(hit)[3]
-    except Exception:
-        distance = hit.to_tuple()[2]
-    return start.z - distance
+    for complex_trace in (True, False):
+        hit = unreal.SystemLibrary.line_trace_single(
+            world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, complex_trace, [],
+            unreal.DrawDebugTrace.NONE, True)
+        if isinstance(hit, tuple):  # bazi surumler (bool, HitResult) dondurur
+            hit = hit[1] if hit and hit[0] else None
+        if not hit:
+            continue
+        parts = unreal.GameplayStatics.break_hit_result(hit)
+        if isinstance(parts[0], bool) and not parts[0]:  # blocking_hit yok
+            continue
+        location = next((v for v in parts if isinstance(v, unreal.Vector)), None)
+        if location is not None:
+            return location.z
+    return None
 
 
 def right_of(direction):
@@ -151,6 +172,7 @@ def detect_side(sample, length):
     world = editor_world()
     votes = 0
     drops = []
+    hits_r = hits_l = 0
     n = 16
     for k in range(n):
         p, t = sample(length * (k + 0.5) / n)
@@ -159,6 +181,8 @@ def detect_side(sample, length):
             continue
         zr = ground_z(world, p.x + r.x * PROBE_SIDE, p.y + r.y * PROBE_SIDE, p.z)
         zl = ground_z(world, p.x - r.x * PROBE_SIDE, p.y - r.y * PROBE_SIDE, p.z)
+        hits_r += zr is not None
+        hits_l += zl is not None
         low = -1.0e9
         hr = zr if zr is not None else low
         hl = zl if zl is not None else low
@@ -168,6 +192,7 @@ def detect_side(sample, length):
         votes += open_side
         lower = min(hr, hl)
         drops.append(p.z - lower if lower > low else PROBE_DEPTH)
+    unreal.log("Bend Wall: isin carpmalari sag=%d/%d sol=%d/%d" % (hits_r, n, hits_l, n))
     drops.sort()
     drop = drops[len(drops) // 2] if drops else None
     return (1 if votes > 0 else -1 if votes < 0 else 0), drop
@@ -190,7 +215,8 @@ def main():
         pass
 
     length, sample, tangent_len = circle_path() if MODE == "circle" else spline_path()
-    mesh_len, side_min, side_max, bottom_z, top_z = mesh_ranges(mesh)
+    axis, mesh_len, side_min, side_max, bottom_z, top_z, roll_deg, sigma = mesh_layout(mesh)
+    roll = math.radians(roll_deg)
 
     target = SEGMENT_LENGTH if SEGMENT_LENGTH > 0 else mesh_len
     if target <= 0:
@@ -198,14 +224,13 @@ def main():
     count = max(1, round(length / target))
     seg = length / count  # parcalar yolu tam doldursun diye hafifce esnetilir
     tan_len = tangent_len(seg)
-    axis = unreal.SplineMeshAxis.Y if FORWARD_AXIS.upper() == "Y" else unreal.SplineMeshAxis.X
 
     with unreal.ScopedEditorTransaction("Bend Wall"):
         if CLEAR_PREVIOUS:
             clear_previous()
 
         # Kemerli on yuz bos tarafa, arka yuz arenaya baksin
-        front = 1 if FRONT_FACE.upper() == "+Y" else -1
+        front = -1 if FRONT_FACE.startswith("-") else 1
         flip = FLIP
         vertical = VERTICAL_ALIGN
         if AUTO_SIDE or vertical == "auto":
@@ -214,14 +239,14 @@ def main():
                 if open_side == 0:
                     unreal.log_warning("Bend Wall: arena bulunamadi (collision yok mu?). FLIP ayari kullaniliyor.")
                 else:
-                    flip = front != open_side
+                    flip = sigma * front != open_side
             if vertical == "auto":
                 vertical = "none" if drop is None else ("top" if drop > 50.0 else "bottom")
             unreal.log("Bend Wall: bos taraf=%s, zemin farki=%s cm, flip=%s, dikey=%s"
                        % ({1: "sag", -1: "sol", 0: "?"}[open_side], drop, flip, vertical))
 
-        side = -side_min if front == 1 else -side_max   # arka yuz cizgiye oturur
-        side += SIDE_OFFSET * front
+        back = side_min if front == 1 else side_max     # arka yuz cizgiye oturur
+        side = -sigma * back + SIDE_OFFSET * sigma * front
         up = {"top": -top_z, "bottom": -bottom_z}.get(vertical, 0.0) + UP_OFFSET
         offset = unreal.Vector2D(side, up)
 
@@ -244,6 +269,8 @@ def main():
             comp.set_forward_axis(axis, False)
             comp.set_start_offset(offset, False)
             comp.set_end_offset(offset, False)
+            comp.set_start_roll(roll, False)
+            comp.set_end_roll(roll, False)
             # Actor p0'da ve donmesiz duruyor, bu yuzden konumlar p0'a gore yerel
             comp.set_start_and_end(unreal.Vector(0.0, 0.0, 0.0), t0 * tan_len,
                                    p1 - p0, t1 * tan_len, True)
