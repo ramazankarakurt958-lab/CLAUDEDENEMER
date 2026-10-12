@@ -314,6 +314,7 @@ def isiklar(arena):
         a.set_actor_label("%sIsik_%02d" % (ETIKET, i))
         a.set_folder_path("Arena/Susleme/Isiklar")
         c = a.get_component_by_class(unreal.PointLightComponent)
+        c.set_mobility(unreal.ComponentMobility.MOVABLE)          # pisirilmis isik gerektirmesin
         try:
             c.set_editor_property("intensity_units", unreal.LightUnits.LUMENS)
         except Exception:

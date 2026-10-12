@@ -7,6 +7,7 @@
 #   7   ArenaSusleme  (mesale atesi, ruzgar, sancaklar, bulut denizi, ates tribunu efektleri)
 #   8   KaliteKademe  (oyun kasmasin)
 #   9   Gorunum       (malzeme ince ayarlari: ates derz koru kapali, selale kopugu seffaf)
+#   10  Aydinlatma    (tamamen dinamik isik: 'aydinlatma yeniden insa' uyarisi gider)
 # Ilerleme Kaynak/hepsi_ilerleme.txt'de. Bir adim yarida kalirsa (cokme) tekrar calistirinca ayni adimi yeniden dener.
 # Bastan kurmak icin komutun basina BASTAN=True; ekle.
 import os
@@ -30,6 +31,7 @@ _HADIMLAR = [
                                "SM_BulutDeniz.glb", "T_Alev.png", "T_Ruzgar.png", "T_Sancak.png", "T_Bulut.png"]),
     ("KaliteKademe.py", True, []),
     ("Gorunum.py", True, []),
+    ("Aydinlatma.py", True, []),
 ]
 _HIL = _HC + "Kaynak/hepsi_ilerleme.txt"
 
