@@ -36,8 +36,8 @@ CIRCLE_RADIUS = 2000.0            # circle modu: yaricap (cm)
 CIRCLE_START_DEG = 0.0            # circle modu: baslangic acisi
 CIRCLE_END_DEG = 360.0            # circle modu: bitis acisi (360 = tam daire)
 
-FOLDER = "BendWall"        # Olusan actor'lar World Outliner'da bu klasore konur
-CLEAR_PREVIOUS = True      # Onceki calistirmadan kalan duvarlari sil
+FOLDER = "BendWall"        # Her cizginin duvarlari BendWall/<cizgi adi> klasorune konur
+CLEAR_PREVIOUS = True      # Ayni cizginin onceki duvarlarini sil (diger cizgilere dokunmaz)
 # =================================================================
 
 PROBE_SIDE = 150.0         # Arenayi bulmak icin cizginin iki yanina bakilan mesafe (cm)
@@ -95,11 +95,12 @@ def mesh_layout(mesh):
 
 
 def spline_path():
-    """(toplam uzunluk, sample(d) -> (konum, birim yon), tangent_boyu(seg))"""
+    """(toplam uzunluk, sample(d) -> (konum, birim yon), tangent_boyu(seg), cizgi adi)"""
     spline = None
     for actor in actor_sub.get_selected_level_actors():
         spline = actor.get_component_by_class(unreal.SplineComponent)
         if spline:
+            name = actor.get_actor_label()
             break
     if not spline:
         raise RuntimeError("Sahnede Spline component'i olan bir actor sec (ornek: BP_WallPath).")
@@ -111,7 +112,7 @@ def spline_path():
         tan = spline.get_tangent_at_distance_along_spline(d, world)
         return loc, tan.normal()
 
-    return spline.get_spline_length(), sample, lambda seg: seg
+    return spline.get_spline_length(), sample, lambda seg: seg, name
 
 
 def circle_path():
@@ -129,7 +130,7 @@ def circle_path():
     def tangent_len(seg):
         return 4.0 * r * math.tan((seg / r) / 4.0)
 
-    return r * abs(a1 - a0), sample, tangent_len
+    return r * abs(a1 - a0), sample, tangent_len, "Daire"
 
 
 def editor_world():
@@ -200,9 +201,9 @@ def detect_side(sample, length):
     return (1 if votes > 0 else -1 if votes < 0 else 0), drop
 
 
-def clear_previous():
+def clear_previous(folder):
     for actor in actor_sub.get_all_level_actors():
-        if isinstance(actor, unreal.SplineMeshActor) and str(actor.get_folder_path()) == FOLDER:
+        if isinstance(actor, unreal.SplineMeshActor) and str(actor.get_folder_path()) == folder:
             actor_sub.destroy_actor(actor)
 
 
@@ -216,7 +217,8 @@ def main():
     except Exception:
         pass
 
-    length, sample, tangent_len = circle_path() if MODE == "circle" else spline_path()
+    length, sample, tangent_len, path_name = circle_path() if MODE == "circle" else spline_path()
+    folder = "%s/%s" % (FOLDER, path_name)
     axis, mesh_len, side_min, side_max, bottom_z, top_z, roll_deg, sigma = mesh_layout(mesh)
     roll = math.radians(roll_deg)
 
@@ -228,7 +230,7 @@ def main():
 
     with unreal.ScopedEditorTransaction("Bend Wall"):
         if CLEAR_PREVIOUS:
-            clear_previous()
+            clear_previous(folder)
 
         # Kemerli on yuz bos tarafa, arka yuz arenaya baksin
         front = -1 if FRONT_FACE.startswith("-") else 1
@@ -266,8 +268,8 @@ def main():
             p1, t1 = point(d1)
 
             actor = actor_sub.spawn_actor_from_class(unreal.SplineMeshActor, p0)
-            actor.set_actor_label("BendWall_%03d" % i)
-            actor.set_folder_path(FOLDER)
+            actor.set_actor_label("%s_Duvar_%03d" % (path_name, i))
+            actor.set_folder_path(folder)
 
             comp = actor.get_component_by_class(unreal.SplineMeshComponent)
             comp.set_static_mesh(mesh)
@@ -280,7 +282,7 @@ def main():
             comp.set_start_and_end(unreal.Vector(0.0, 0.0, 0.0), t0 * tan_len,
                                    p1 - p0, t1 * tan_len, True)
 
-    unreal.log("Bend Wall: %d parca olusturuldu (parca boyu %.1f cm)." % (count, seg))
+    unreal.log("Bend Wall: %d parca olusturuldu (parca boyu %.1f cm), klasor: %s." % (count, seg, folder))
 
 
 main()
